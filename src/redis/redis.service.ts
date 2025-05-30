@@ -1,14 +1,16 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Redis } from 'ioredis';
+import { Redis, Cluster, NodeRole } from 'ioredis';
 import { Logger } from '@nestjs/common';
 
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
-  private redisClient!: Redis;
-  private redisSubscriber!: Redis;
-  private redisPublisher!: Redis;
+  private redisClient!: Redis | Cluster;
+  private redisSubscriber!: Redis | Cluster;
+  private redisPublisher!: Redis | Cluster;
   private readonly logger = new Logger(RedisService.name);
+  private readonly poolSize = 10;
+  private readonly sessionExpiry = 24 * 60 * 60; // 24 hours in seconds
 
   constructor(
     private readonly configService: ConfigService
@@ -16,6 +18,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
 
   async onModuleInit() {
     const redisConfig = this.configService.get('redis');
+    const isCluster = redisConfig.cluster?.enabled || false;
     
     const redisOptions = {
       host: redisConfig.host,
@@ -33,13 +36,45 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       reconnectOnError: (err: Error) => {
         this.logger.error('Redis connection error:', err.message);
         return true; // Reconnect on any error
-      }
+      },
+      // Connection pooling options
+      connectionName: 'main',
+      enableOfflineQueue: true,
+      enableAutoPipelining: true,
+      maxScripts: 100,
+      lazyConnect: false,
+      keepAlive: 30000,
+      family: 4,
+      tls: redisConfig.tls || undefined,
+    };
+
+    const clusterOptions = {
+      redisOptions,
+      scaleReads: 'slave' as NodeRole,
+      maxRedirections: 16,
+      retryDelayOnFailover: 100,
+      retryDelayOnClusterDown: 100,
+      retryDelayOnTryAgain: 100,
+      enableOfflineQueue: true,
+      enableReadyCheck: true,
+      clusterRetryStrategy: (times: number) => {
+        const delay = Math.min(times * 50, 2000);
+        this.logger.log(`Retrying Redis cluster connection in ${delay}ms...`);
+        return delay;
+      },
     };
 
     try {
-      this.redisClient = new Redis(redisOptions);
-      this.redisSubscriber = new Redis(redisOptions);
-      this.redisPublisher = new Redis(redisOptions);
+      if (isCluster) {
+        const clusterNodes = redisConfig.cluster.nodes;
+        this.redisClient = new Cluster(clusterNodes, clusterOptions);
+        this.redisSubscriber = new Cluster(clusterNodes, clusterOptions);
+        this.redisPublisher = new Cluster(clusterNodes, clusterOptions);
+      } else {
+        this.redisClient = new Redis(redisOptions);
+        this.redisSubscriber = new Redis(redisOptions);
+        this.redisPublisher = new Redis(redisOptions);
+      }
 
       // Wait for Redis connections to be ready
       await Promise.all([
@@ -54,28 +89,17 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       throw error;
     }
 
-    this.redisClient.on('error', (error: Error) => {
-      this.logger.error('Redis client error:', error.message);
-    });
-
-    this.redisSubscriber.on('error', (error: Error) => {
-      this.logger.error('Redis subscriber error:', error.message);
-    });
-
-    this.redisPublisher.on('error', (error: Error) => {
-      this.logger.error('Redis publisher error:', error.message);
-    });
-
-    // Add connection event handlers
-    ['connect', 'ready', 'reconnecting', 'end'].forEach(event => {
-      this.redisClient.on(event, () => {
-        this.logger.log(`Redis client ${event}`);
+    // Add error handlers
+    [this.redisClient, this.redisSubscriber, this.redisPublisher].forEach(client => {
+      client.on('error', (error: Error) => {
+        this.logger.error('Redis client error:', error.message);
       });
-      this.redisSubscriber.on(event, () => {
-        this.logger.log(`Redis subscriber ${event}`);
-      });
-      this.redisPublisher.on(event, () => {
-        this.logger.log(`Redis publisher ${event}`);
+
+      // Add connection event handlers
+      ['connect', 'ready', 'reconnecting', 'end'].forEach(event => {
+        client.on(event, () => {
+          this.logger.log(`Redis client ${event}`);
+        });
       });
     });
   }
@@ -124,7 +148,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
         status,
         lastSeen: lastSeen || new Date()
       });
-      await this.redisClient.set(key, value);
+      await this.redisClient.set(key, value, 'EX', this.sessionExpiry);
     } catch (error) {
       if (error instanceof Error) {
         this.logger.error(`Failed to set user status for ${userId}:`, error.message);
@@ -153,7 +177,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   async setUserSession(userId: string, socketId: string, data: any): Promise<void> {
     try {
       const key = `user:${userId}:session:${socketId}`;
-      await this.redisClient.set(key, JSON.stringify(data));
+      await this.redisClient.set(key, JSON.stringify(data), 'EX', this.sessionExpiry);
     } catch (error) {
       if (error instanceof Error) {
         this.logger.error(`Failed to set user session for ${userId}:`, error.message);
@@ -206,5 +230,33 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       }
       throw error;
     }
+  }
+
+  // New method for transaction support
+  async executeTransaction<T>(callback: (multi: any) => Promise<T>): Promise<T> {
+    const multi = this.redisClient.multi();
+    try {
+      const result = await callback(multi);
+      await multi.exec();
+      return result;
+    } catch (error) {
+      await multi.discard();
+      if (error instanceof Error) {
+        this.logger.error('Transaction failed:', error.message);
+      } else {
+        this.logger.error('Transaction failed: Unknown error');
+      }
+      throw error;
+    }
+  }
+
+  // New method for batch operations
+  async pipeline(operations: Array<{ command: string; args: any[] }>): Promise<[Error | null, any][]> {
+    const pipeline = this.redisClient.pipeline();
+    operations.forEach(({ command, args }) => {
+      pipeline[command](...args);
+    });
+    const results = await pipeline.exec();
+    return results || [];
   }
 } 

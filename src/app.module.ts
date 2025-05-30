@@ -6,7 +6,7 @@ import { LoggerModule } from './logger/logger.module';
 import { RedisService } from './redis/redis.service';
 import { AppWebSocketGateway } from './websocket/websocket.gateway';
 import { JwtWsGuard } from './auth/jwt-ws.guard';
-import { CustomLogger } from './logger/custom.logger';
+import { CustomLogger } from './logger/logger.service';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 

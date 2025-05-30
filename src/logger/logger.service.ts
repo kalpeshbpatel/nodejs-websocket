@@ -2,11 +2,28 @@ import { Injectable, LoggerService } from '@nestjs/common';
 import * as winston from 'winston';
 import * as fs from 'fs';
 import * as path from 'path';
+import { v4 as uuidv4 } from 'uuid';
+
+// Use require for winston-daily-rotate-file
+const DailyRotateFile = require('winston-daily-rotate-file');
+
+// Custom format to ensure consistent field ordering
+const orderedJsonFormat = winston.format.printf((info) => {
+  const { timestamp, level, context, message, ...rest } = info;
+  return JSON.stringify({
+    timestamp,
+    level,
+    context,
+    message,
+    ...rest
+  });
+});
 
 @Injectable()
 export class CustomLogger implements LoggerService {
   private logger: winston.Logger;
   private context?: string;
+  private requestId?: string;
 
   constructor() {
     // Create logs directory if it doesn't exist
@@ -23,39 +40,44 @@ export class CustomLogger implements LoggerService {
           format: 'YYYY-MM-DD HH:mm:ss',
         }),
         winston.format.errors({ stack: true }),
-        winston.format.printf(({ timestamp, level, message, context, stack }) => {
-          const contextStr = context ? `[${context}] ` : '';
-          const stackStr = stack ? `\n${stack}` : '';
-          return `${timestamp} [${level.toUpperCase()}] ${contextStr}${message}${stackStr}`;
-        }),
+        orderedJsonFormat
       ),
       transports: [
-        // Console transport
+        // Console transport with ordered JSON format
         new winston.transports.Console({
           level: process.env.LOG_LEVEL_CONSOLE || 'info',
           format: winston.format.combine(
-            winston.format.colorize(),
-            winston.format.printf(({ timestamp, level, message, context }) => {
-              const contextStr = context ? `[${context}] ` : '';
-              return `${timestamp} ${level} ${contextStr}${message}`;
+            winston.format.timestamp({
+              format: 'YYYY-MM-DD HH:mm:ss',
             }),
+            orderedJsonFormat
           ),
         }),
-        // File transport for all logs
-        new winston.transports.File({
-          filename: path.join(logsDir, 'websocket-server.log'),
+        // Rotating file transport for all logs
+        new DailyRotateFile({
+          filename: path.join(logsDir, 'websocket-server-%DATE%.log'),
+          datePattern: 'YYYY-MM-DD',
+          maxSize: '20m',
+          maxFiles: '14d',
           format: winston.format.combine(
-            winston.format.timestamp(),
-            winston.format.json(),
+            winston.format.timestamp({
+              format: 'YYYY-MM-DD HH:mm:ss',
+            }),
+            orderedJsonFormat
           ),
         }),
-        // File transport for errors
-        new winston.transports.File({
-          filename: path.join(logsDir, 'websocket-error.log'),
+        // Rotating file transport for errors
+        new DailyRotateFile({
+          filename: path.join(logsDir, 'websocket-error-%DATE%.log'),
+          datePattern: 'YYYY-MM-DD',
+          maxSize: '20m',
+          maxFiles: '14d',
           level: 'error',
           format: winston.format.combine(
-            winston.format.timestamp(),
-            winston.format.json(),
+            winston.format.timestamp({
+              format: 'YYYY-MM-DD HH:mm:ss',
+            }),
+            orderedJsonFormat
           ),
         }),
       ],
@@ -66,23 +88,53 @@ export class CustomLogger implements LoggerService {
     this.context = context;
   }
 
-  log(message: any, context?: string) {
-    this.logger.info(message, { context: context || this.context });
+  setRequestId(requestId?: string) {
+    this.requestId = requestId || uuidv4();
+    return this.requestId;
   }
 
-  error(message: any, stack?: string, context?: string) {
-    this.logger.error(message, { context: context || this.context, stack });
+  getRequestId(): string | undefined {
+    return this.requestId;
   }
 
-  warn(message: any, context?: string) {
-    this.logger.warn(message, { context: context || this.context });
+  log(message: any, context?: string, metadata?: Record<string, any>) {
+    this.logger.info(message, { 
+      context: context || this.context,
+      requestId: this.requestId,
+      ...metadata
+    });
   }
 
-  debug(message: any, context?: string) {
-    this.logger.debug(message, { context: context || this.context });
+  error(message: any, stack?: string, context?: string, metadata?: Record<string, any>) {
+    this.logger.error(message, { 
+      context: context || this.context, 
+      stack,
+      requestId: this.requestId,
+      ...metadata
+    });
   }
 
-  verbose(message: any, context?: string) {
-    this.logger.verbose(message, { context: context || this.context });
+  warn(message: any, context?: string, metadata?: Record<string, any>) {
+    this.logger.warn(message, { 
+      context: context || this.context,
+      requestId: this.requestId,
+      ...metadata
+    });
+  }
+
+  debug(message: any, context?: string, metadata?: Record<string, any>) {
+    this.logger.debug(message, { 
+      context: context || this.context,
+      requestId: this.requestId,
+      ...metadata
+    });
+  }
+
+  verbose(message: any, context?: string, metadata?: Record<string, any>) {
+    this.logger.verbose(message, { 
+      context: context || this.context,
+      requestId: this.requestId,
+      ...metadata
+    });
   }
 } 

@@ -1,7 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
-import { CustomLogger } from './logger/custom.logger';
+import { CustomLogger } from './logger/logger.service';
 import * as helmet from 'helmet';
 import * as compression from 'compression';
 import * as cookieParser from 'cookie-parser';
@@ -16,13 +16,14 @@ async function bootstrap() {
     fs.mkdirSync(logsDir, { recursive: true });
   }
 
-  // Create NestJS application
-  const customLogger = new CustomLogger('NestApplication');
-
+  // Create NestJS application with custom logger
   const app = await NestFactory.create(AppModule, {
-    logger: customLogger,
     bufferLogs: true,
   });
+
+  // Get the custom logger instance
+  const logger = app.get(CustomLogger);
+  app.useLogger(logger);
 
   const configService = app.get(ConfigService);
   const port = configService.get('port') || 3001;
@@ -52,10 +53,9 @@ async function bootstrap() {
   // Start the server
   await app.listen(port);
   
-  const logger = app.get(CustomLogger);
-  logger.log(`WebSocket server is running on port ${port}`);
-  logger.log('WebSocket endpoint available at: ws://localhost:' + port);
-  logger.debug('Debug logging is enabled');
+  logger.log(`WebSocket server is running on port ${port}`, 'NestApplication');
+  logger.log(`WebSocket endpoint available at: ws://localhost:${port}`, 'NestApplication');
+  logger.debug('Debug logging is enabled', 'NestApplication');
 }
 
 bootstrap().catch((error) => {
