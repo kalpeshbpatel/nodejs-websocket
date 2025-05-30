@@ -23,7 +23,7 @@ services:
       LOG_LEVEL_CONSOLE: "info"
       CORS_ORIGIN: "*"
     volumes:
-      - ./logs:/app/logs
+      - ./logs/app1:/app/logs
     networks:
       - app-network
     restart: unless-stopped
@@ -50,7 +50,7 @@ services:
       LOG_LEVEL_CONSOLE: "info"
       CORS_ORIGIN: "*"
     volumes:
-      - ./logs:/app/logs
+      - ./logs/app2:/app/logs
     networks:
       - app-network
     restart: unless-stopped

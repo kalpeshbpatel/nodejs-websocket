@@ -53,9 +53,9 @@ export class CustomLogger implements LoggerService {
             orderedJsonFormat
           ),
         }),
-        // Rotating file transport for all logs
+        // Single rotating file transport for all logs
         new DailyRotateFile({
-          filename: path.join(logsDir, 'websocket-server-%DATE%.log'),
+          filename: path.join(logsDir, 'app-%DATE%.log'),
           datePattern: 'YYYY-MM-DD',
           maxSize: '20m',
           maxFiles: '14d',
@@ -65,20 +65,11 @@ export class CustomLogger implements LoggerService {
             }),
             orderedJsonFormat
           ),
-        }),
-        // Rotating file transport for errors
-        new DailyRotateFile({
-          filename: path.join(logsDir, 'websocket-error-%DATE%.log'),
-          datePattern: 'YYYY-MM-DD',
-          maxSize: '20m',
-          maxFiles: '14d',
-          level: 'error',
-          format: winston.format.combine(
-            winston.format.timestamp({
-              format: 'YYYY-MM-DD HH:mm:ss',
-            }),
-            orderedJsonFormat
-          ),
+          options: {
+            flags: 'a',
+            mode: 0o666,
+            auditFile: null // Disable audit file
+          }
         }),
       ],
     });
