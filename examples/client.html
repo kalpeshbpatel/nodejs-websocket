@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Client Example</title>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            background: #f5f5f5;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+        input, button {
+            padding: 10px;
+            margin: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        .log {
+            background: #000;
+            color: #00ff00;
+            padding: 10px;
+            height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .connected {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .disconnected {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+<body>
+    <h1>WebSocket Client Example</h1>
+    
+    <div class="container">
+        <h3>Connection</h3>
+        <div>
+            <label for="tokenInput">JWT Token:</label><br>
+            <input type="text" id="tokenInput" placeholder="Enter JWT token from nodejs-api" style="width: 500px;">
+        </div>
+        <div>
+            <label for="serverUrl">Server URL:</label><br>
+            <input type="text" id="serverUrl" value="ws://localhost:3001" style="width: 300px;">
+        </div>
+        <button id="connectBtn">Connect</button>
+        <button id="disconnectBtn" disabled>Disconnect</button>
+        <div id="status" class="status disconnected">Disconnected</div>
+    </div>
+
+    <div class="container">
+        <h3>Actions</h3>
+        <button id="pingBtn" disabled>Ping</button>
+        <button id="getUsersBtn" disabled>Get Online Users</button>
+        <div>
+            <input type="text" id="roomInput" placeholder="Room name" disabled>
+            <button id="joinRoomBtn" disabled>Join Room</button>
+            <button id="leaveRoomBtn" disabled>Leave Room</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <h3>Log</h3>
+        <button onclick="clearLog()">Clear Log</button>
+        <div id="log" class="log"></div>
+    </div>
+
+    <script>
+        let socket = null;
+        let isConnected = false;
+
+        const tokenInput = document.getElementById('tokenInput');
+        const serverUrl = document.getElementById('serverUrl');
+        const connectBtn = document.getElementById('connectBtn');
+        const disconnectBtn = document.getElementById('disconnectBtn');
+        const status = document.getElementById('status');
+        const log = document.getElementById('log');
+        const pingBtn = document.getElementById('pingBtn');
+        const getUsersBtn = document.getElementById('getUsersBtn');
+        const roomInput = document.getElementById('roomInput');
+        const joinRoomBtn = document.getElementById('joinRoomBtn');
+        const leaveRoomBtn = document.getElementById('leaveRoomBtn');
+
+        function logMessage(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            log.textContent += `[${timestamp}] ${message}\n`;
+            log.scrollTop = log.scrollHeight;
+        }
+
+        function clearLog() {
+            log.textContent = '';
+        }
+
+        function updateConnectionStatus(connected) {
+            isConnected = connected;
+            if (connected) {
+                status.textContent = 'Connected';
+                status.className = 'status connected';
+                connectBtn.disabled = true;
+                disconnectBtn.disabled = false;
+                pingBtn.disabled = false;
+                getUsersBtn.disabled = false;
+                roomInput.disabled = false;
+                joinRoomBtn.disabled = false;
+                leaveRoomBtn.disabled = false;
+            } else {
+                status.textContent = 'Disconnected';
+                status.className = 'status disconnected';
+                connectBtn.disabled = false;
+                disconnectBtn.disabled = true;
+                pingBtn.disabled = true;
+                getUsersBtn.disabled = true;
+                roomInput.disabled = true;
+                joinRoomBtn.disabled = true;
+                leaveRoomBtn.disabled = true;
+            }
+        }
+
+        connectBtn.addEventListener('click', () => {
+            const token = tokenInput.value.trim();
+            const url = serverUrl.value.trim();
+
+            if (!token) {
+                alert('Please enter a JWT token');
+                return;
+            }
+
+            logMessage('Connecting to ' + url + '...');
+
+            socket = io(url, {
+                auth: {
+                    token: token.startsWith('Bearer ') ? token : 'Bearer ' + token
+                }
+            });
+
+            socket.on('connect', () => {
+                logMessage('Socket connected with ID: ' + socket.id);
+                updateConnectionStatus(true);
+            });
+
+            socket.on('connected', (data) => {
+                logMessage('Server confirmed connection: ' + JSON.stringify(data, null, 2));
+            });
+
+            socket.on('disconnect', () => {
+                logMessage('Socket disconnected');
+                updateConnectionStatus(false);
+            });
+
+            socket.on('error', (error) => {
+                logMessage('Error: ' + JSON.stringify(error, null, 2));
+            });
+
+            socket.on('pong', (data) => {
+                logMessage('Pong received: ' + JSON.stringify(data, null, 2));
+            });
+
+            socket.on('user_status_update', (data) => {
+                logMessage('User status update: ' + JSON.stringify(data, null, 2));
+            });
+
+            socket.on('online_users', (data) => {
+                logMessage('Online users: ' + JSON.stringify(data, null, 2));
+            });
+
+            socket.on('joined_room', (data) => {
+                logMessage('Joined room: ' + JSON.stringify(data, null, 2));
+            });
+
+            socket.on('left_room', (data) => {
+                logMessage('Left room: ' + JSON.stringify(data, null, 2));
+            });
+
+            socket.on('user_joined_room', (data) => {
+                logMessage('User joined room: ' + JSON.stringify(data, null, 2));
+            });
+
+            socket.on('user_left_room', (data) => {
+                logMessage('User left room: ' + JSON.stringify(data, null, 2));
+            });
+
+            socket.on('connect_error', (error) => {
+                logMessage('Connection error: ' + error.message);
+                updateConnectionStatus(false);
+            });
+        });
+
+        disconnectBtn.addEventListener('click', () => {
+            if (socket) {
+                socket.disconnect();
+                socket = null;
+            }
+        });
+
+        pingBtn.addEventListener('click', () => {
+            if (socket && isConnected) {
+                logMessage('Sending ping...');
+                socket.emit('ping');
+            }
+        });
+
+        getUsersBtn.addEventListener('click', () => {
+            if (socket && isConnected) {
+                logMessage('Requesting online users...');
+                socket.emit('get_online_users');
+            }
+        });
+
+        joinRoomBtn.addEventListener('click', () => {
+            const roomName = roomInput.value.trim();
+            if (socket && isConnected && roomName) {
+                logMessage('Joining room: ' + roomName);
+                socket.emit('join_room', { room: roomName });
+            } else if (!roomName) {
+                alert('Please enter a room name');
+            }
+        });
+
+        leaveRoomBtn.addEventListener('click', () => {
+            const roomName = roomInput.value.trim();
+            if (socket && isConnected && roomName) {
+                logMessage('Leaving room: ' + roomName);
+                socket.emit('leave_room', { room: roomName });
+            } else if (!roomName) {
+                alert('Please enter a room name');
+            }
+        });
+
+        // Initialize
+        updateConnectionStatus(false);
+        logMessage('WebSocket client ready. Enter your JWT token and click Connect.');
+        logMessage('To get a JWT token, login to the nodejs-api at http://localhost:8080/api-docs');
+    </script>
+</body>
+</html> 

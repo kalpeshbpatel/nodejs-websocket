@@ -1,0 +1,61 @@
+version: "3.8"
+
+services:
+  websocket1:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: scarfall-websocket-1
+    hostname: websocket1.scarfall.local
+    ports:
+      - "3001:3001"
+    environment:
+      NODE_ENV: "production"
+      PORT: "3001"
+      JWT_SECRET: "1QkF64bMBdCN68KqSeEI6A1w5ObNuAX9q839d76D+no="
+      JWT_ACCESS_TOKEN_EXPIRATION: "1h"
+      JWT_REFRESH_TOKEN_EXPIRATION: "7d"
+      REDIS_HOST: "redis.scarfall.local"
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: "scarfall@redis"
+      JWT_REDIS_KEY_PREFIX: "jwt:"
+      LOG_LEVEL_FILE: "debug"
+      LOG_LEVEL_CONSOLE: "info"
+      CORS_ORIGIN: "*"
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  websocket2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: scarfall-websocket-2
+    hostname: websocket2.scarfall.local
+    ports:
+      - "3002:3001"
+    environment:
+      NODE_ENV: "production"
+      PORT: "3001"
+      JWT_SECRET: "1QkF64bMBdCN68KqSeEI6A1w5ObNuAX9q839d76D+no="
+      JWT_ACCESS_TOKEN_EXPIRATION: "1h"
+      JWT_REFRESH_TOKEN_EXPIRATION: "7d"
+      REDIS_HOST: "redis.scarfall.local"
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: "scarfall@redis"
+      JWT_REDIS_KEY_PREFIX: "jwt:"
+      LOG_LEVEL_FILE: "debug"
+      LOG_LEVEL_CONSOLE: "info"
+      CORS_ORIGIN: "*"
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - app-network
+    restart: unless-stopped
+
+networks:
+  app-network:
+    name: scarefall
+    external: true
