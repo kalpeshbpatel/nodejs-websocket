@@ -128,12 +128,8 @@ export class AppWebSocketGateway implements OnGatewayInit, OnGatewayConnection, 
             }
           });
 
-          // Broadcast user status update to all instances
-          this.server.emit('user_status_update', {
-            userId: payload.sub,
-            status: 'online',
-            email: payload.email
-          });
+          // Send user status update only to friends instead of broadcasting to all
+          await this.notifyFriendsOfStatusChange(payload.sub, 'online', payload.email);
 
           this.logger.log(`User authenticated: ${payload.email} (${payload.sub})`);
 
@@ -161,17 +157,53 @@ export class AppWebSocketGateway implements OnGatewayInit, OnGatewayConnection, 
         // Remove session from Redis
         await this.redisService.removeUserSession(user.userId, client.id);
 
-        // Broadcast user status update to all instances
-        this.server.emit('user_status_update', {
-          userId: user.userId,
-          status: 'offline',
-          email: user.email
-        });
+        // Send user status update only to friends instead of broadcasting to all
+        await this.notifyFriendsOfStatusChange(user.userId, 'offline', user.email);
       } else {
         this.logger.debug(`Unauthenticated socket disconnected: ${client.id}`);
       }
     } catch (error) {
       this.logger.error(`Disconnect error for socket ${client.id}:`, error);
+    }
+  }
+
+  // New method to notify only friends of status changes
+  private async notifyFriendsOfStatusChange(userId: string, status: 'online' | 'offline', email: string) {
+    try {
+      // Get all users who have this user as a friend
+      const friendsToNotify = await this.redisService.getUsersWhoHaveAsFriend(userId);
+
+      // Get online sessions for friends who should be notified
+      for (const friendUserId of friendsToNotify) {
+        try {
+          const friendStatus = await this.redisService.getUserStatus(friendUserId);
+          if (friendStatus && friendStatus.status === 'online') {
+            // Get friend's active sessions
+            const sessionKeys = await this.redisService.getUserSessions(friendUserId);
+            
+            // Send status update to each active session
+            for (const sessionKey of sessionKeys) {
+              const socketId = sessionKey.split(':').pop();
+              if (socketId) {
+                this.server.to(socketId).emit('user_status_update', {
+                  userId,
+                  status,
+                  email
+                });
+              }
+            }
+          }
+        } catch (sessionError) {
+          this.logger.warn(`Failed to notify friend ${friendUserId} of status change:`, sessionError);
+        }
+      }
+
+      this.logger.debug(`Notified ${friendsToNotify.length} friends of ${email}'s status change to ${status}`);
+      
+    } catch (error) {
+      this.logger.error(`Failed to notify friends of status change for user ${userId}:`, error);
+      // Fallback: if friend notification fails, don't broadcast to everyone
+      // This maintains the privacy requirement
     }
   }
 
@@ -183,13 +215,43 @@ export class AppWebSocketGateway implements OnGatewayInit, OnGatewayConnection, 
   @SubscribeMessage('get_online_users')
   async handleGetOnlineUsers(client: Socket) {
     try {
-      const users = await this.redisService.getUserStatus('*');
-      if (!users) {
+      const user = client.data.user;
+      if (!user) {
         return { users: [] };
       }
-      return { users: [users].filter(user => user.status === 'online') };
+
+      // Get user's friends
+      const friends = await this.redisService.getUserFriends(user.userId);
+      if (!friends || friends.length === 0) {
+        return { users: [] };
+      }
+
+      const onlineFriends: Array<{
+        userId: string;
+        email: string;
+        status: string;
+        lastSeen: Date;
+      }> = [];
+
+      // Check each friend's status
+      for (const friend of friends) {
+        const friendUserId = friend._id || friend.userId;
+        if (!friendUserId) continue;
+
+        const status = await this.redisService.getUserStatus(friendUserId);
+        if (status && status.status === 'online') {
+          onlineFriends.push({
+            userId: friendUserId,
+            email: friend.email,
+            status: 'online',
+            lastSeen: status.lastSeen
+          });
+        }
+      }
+
+      return { users: onlineFriends };
     } catch (error) {
-      this.logger.error('Error getting online users:', error);
+      this.logger.error('Error getting online friends:', error);
       return { users: [] };
     }
   }

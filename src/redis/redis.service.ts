@@ -259,4 +259,132 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     const results = await pipeline.exec();
     return results || [];
   }
+
+  // Friend-related methods
+  async getUserFriends(userId: string): Promise<any[]> {
+    try {
+      const key = `friends:${userId}`;
+      const value = await this.redisClient.get(key);
+      return value ? JSON.parse(value) : [];
+    } catch (error) {
+      if (error instanceof Error) {
+        this.logger.error(`Failed to get friends for user ${userId}:`, error.message);
+      } else {
+        this.logger.error(`Failed to get friends for user ${userId}: Unknown error`);
+      }
+      throw error;
+    }
+  }
+
+  async getOnlineFriendSessions(userId: string): Promise<string[]> {
+    try {
+      // Get user's friends
+      const friends = await this.getUserFriends(userId);
+      if (!friends || friends.length === 0) {
+        return [];
+      }
+
+      const onlineFriendSessions: string[] = [];
+
+      // Check each friend's online status and get their session keys
+      for (const friend of friends) {
+        const friendUserId = friend._id || friend.userId;
+        if (!friendUserId) continue;
+
+        // Check if friend is online
+        const status = await this.getUserStatus(friendUserId);
+        if (status && status.status === 'online') {
+          // Get friend's active sessions
+          const sessionKeys = await this.getUserSessions(friendUserId);
+          
+          // Extract socket IDs from session keys
+          for (const sessionKey of sessionKeys) {
+            const sessionData = await this.redisClient.get(sessionKey);
+            if (sessionData) {
+              // Extract socket ID from the session key pattern: user:userId:session:socketId
+              const socketId = sessionKey.split(':').pop();
+              if (socketId) {
+                onlineFriendSessions.push(socketId);
+              }
+            }
+          }
+        }
+      }
+
+      return onlineFriendSessions;
+    } catch (error) {
+      if (error instanceof Error) {
+        this.logger.error(`Failed to get online friend sessions for user ${userId}:`, error.message);
+      } else {
+        this.logger.error(`Failed to get online friend sessions for user ${userId}: Unknown error`);
+      }
+      return [];
+    }
+  }
+
+  async getFriendUserIds(userId: string): Promise<string[]> {
+    try {
+      const friends = await this.getUserFriends(userId);
+      return friends.map(friend => friend._id || friend.userId).filter(Boolean);
+    } catch (error) {
+      if (error instanceof Error) {
+        this.logger.error(`Failed to get friend user IDs for user ${userId}:`, error.message);
+      } else {
+        this.logger.error(`Failed to get friend user IDs for user ${userId}: Unknown error`);
+      }
+      return [];
+    }
+  }
+
+  async getAllFriendKeys(): Promise<string[]> {
+    try {
+      return await this.redisClient.keys('friends:*');
+    } catch (error) {
+      if (error instanceof Error) {
+        this.logger.error('Failed to get all friend keys:', error.message);
+      } else {
+        this.logger.error('Failed to get all friend keys: Unknown error');
+      }
+      return [];
+    }
+  }
+
+  async getUsersWhoHaveAsFriend(targetUserId: string): Promise<string[]> {
+    try {
+      const allUserKeys = await this.getAllFriendKeys();
+      const usersWhoHaveAsFriend: string[] = [];
+
+      for (const friendKey of allUserKeys) {
+        try {
+          const friendsData = await this.redisClient.get(friendKey);
+          if (friendsData) {
+            const friends = JSON.parse(friendsData);
+            const hasFriend = friends.some((friend: any) => 
+              (friend._id && friend._id === targetUserId) || 
+              (friend.userId && friend.userId === targetUserId)
+            );
+            
+            if (hasFriend) {
+              // Extract user ID from key pattern: friends:userId
+              const userId = friendKey.split(':')[1];
+              if (userId) {
+                usersWhoHaveAsFriend.push(userId);
+              }
+            }
+          }
+        } catch (parseError) {
+          this.logger.warn(`Failed to parse friends data for key ${friendKey}:`, parseError);
+        }
+      }
+
+      return usersWhoHaveAsFriend;
+    } catch (error) {
+      if (error instanceof Error) {
+        this.logger.error(`Failed to get users who have ${targetUserId} as friend:`, error.message);
+      } else {
+        this.logger.error(`Failed to get users who have ${targetUserId} as friend: Unknown error`);
+      }
+      return [];
+    }
+  }
 } 

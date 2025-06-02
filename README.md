@@ -25,8 +25,8 @@ A real-time WebSocket server built with NestJS, Socket.IO, Redis Pub/Sub, and JW
 
 #### Status Events
 
-- `user_status_update` - User online/offline status changes
-- `online_users` - List of currently online users
+- `user_status_update` - User online/offline status changes (sent only to friends)
+- `online_users` - List of currently online friends (not all users)
 
 #### Room Events
 
@@ -42,6 +42,37 @@ A real-time WebSocket server built with NestJS, Socket.IO, Redis Pub/Sub, and JW
 - `ping` - Health check ping
 - `pong` - Health check response
 - `error` - Error notifications
+
+#### Friend-Based Privacy
+
+The WebSocket server now implements friend-based privacy for status updates:
+
+- **Status Updates**: When a user comes online or goes offline, only their friends receive the `user_status_update` event
+- **Online Users**: The `get_online_users` event returns only friends who are online, not all online users
+- **Friend Data**: Friend relationships are stored in Redis with the key pattern `friends:userId`
+
+##### Friend Data Format in Redis
+
+```json
+{
+  "key": "friends:683d6aaedb525b175ea8ee40",
+  "value": [
+    {
+      "_id": "683d6adfdb525b175ea8ee46",
+      "email": "jigisha.kb.patel@gmail.com",
+      "userId": "jigisha.patel"
+    }
+  ]
+}
+```
+
+##### Setting Up Friend Data
+
+You can use the example script to set up test friend data:
+
+```bash
+node examples/test-friends.js
+```
 
 ## 📋 Prerequisites
 
