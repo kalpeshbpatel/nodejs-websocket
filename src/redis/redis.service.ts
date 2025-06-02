@@ -387,4 +387,87 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       return [];
     }
   }
+
+  async getAllOnlineUsers(): Promise<Array<{userId: string; status: string; lastSeen: Date}>> {
+    try {
+      const pattern = 'user:*:status';
+      const statusKeys = await this.redisClient.keys(pattern);
+      const onlineUsers: Array<{userId: string; status: string; lastSeen: Date}> = [];
+
+      for (const key of statusKeys) {
+        const statusData = await this.redisClient.get(key);
+        if (statusData) {
+          const status = JSON.parse(statusData);
+          if (status.status === 'online') {
+            // Extract userId from key pattern: user:userId:status
+            const userId = key.split(':')[1];
+            onlineUsers.push({
+              userId,
+              status: status.status,
+              lastSeen: new Date(status.lastSeen)
+            });
+          }
+        }
+      }
+
+      return onlineUsers;
+    } catch (error) {
+      if (error instanceof Error) {
+        this.logger.error('Failed to get all online users:', error.message);
+      } else {
+        this.logger.error('Failed to get all online users: Unknown error');
+      }
+      return [];
+    }
+  }
+
+  async getDetailedOnlineUsers(): Promise<Array<{userId: string; email?: string; status: string; lastSeen: Date; sessionCount: number}>> {
+    try {
+      const onlineUsers = await this.getAllOnlineUsers();
+      const detailedUsers: Array<{userId: string; email?: string; status: string; lastSeen: Date; sessionCount: number}> = [];
+
+      for (const user of onlineUsers) {
+        try {
+          // Get user sessions to count active sessions
+          const sessionKeys = await this.getUserSessions(user.userId);
+          let email = '';
+
+          // Try to get email from first active session
+          if (sessionKeys.length > 0) {
+            const sessionData = await this.redisClient.get(sessionKeys[0]);
+            if (sessionData) {
+              const session = JSON.parse(sessionData);
+              email = session.email || '';
+            }
+          }
+
+          detailedUsers.push({
+            userId: user.userId,
+            email,
+            status: user.status,
+            lastSeen: user.lastSeen,
+            sessionCount: sessionKeys.length
+          });
+        } catch (userError) {
+          this.logger.warn(`Failed to get details for user ${user.userId}:`, userError);
+          // Add basic info even if detailed info fails
+          detailedUsers.push({
+            userId: user.userId,
+            status: user.status,
+            lastSeen: user.lastSeen,
+            sessionCount: 0
+          });
+        }
+      }
+
+      return detailedUsers;
+    } catch (error) {
+      if (error instanceof Error) {
+        this.logger.error('Failed to get detailed online users:', error.message);
+      } else {
+        this.logger.error('Failed to get detailed online users: Unknown error');
+      }
+      return [];
+    }
+  }
 } 

@@ -3,265 +3,626 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebSocket Client Example</title>
+    <title>WebSocket Client - Friends & Online Users</title>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
         body {
-            font-family: Arial, sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
             padding: 20px;
         }
+        
         .container {
-            background: #f5f5f5;
-            padding: 20px;
-            border-radius: 8px;
-            margin: 10px 0;
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            overflow: hidden;
         }
-        input, button {
-            padding: 10px;
-            margin: 5px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-        }
-        button {
-            background: #007bff;
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+        
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            padding: 30px;
+        }
+        
+        .panel {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 25px;
+            border: 1px solid #e9ecef;
+        }
+        
+        .panel h3 {
+            color: #495057;
+            margin-bottom: 20px;
+            font-size: 1.3em;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #495057;
+        }
+        
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
             cursor: pointer;
+            transition: all 0.3s;
+            margin: 5px;
         }
-        button:hover {
-            background: #0056b3;
+        
+        .btn-primary {
+            background: #667eea;
+            color: white;
         }
-        button:disabled {
+        
+        .btn-primary:hover:not(:disabled) {
+            background: #5a67d8;
+            transform: translateY(-2px);
+        }
+        
+        .btn-secondary {
             background: #6c757d;
+            color: white;
+        }
+        
+        .btn-secondary:hover:not(:disabled) {
+            background: #5a6268;
+        }
+        
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+        
+        .btn-success:hover:not(:disabled) {
+            background: #218838;
+        }
+        
+        .btn-warning {
+            background: #ffc107;
+            color: #212529;
+        }
+        
+        .btn-warning:hover:not(:disabled) {
+            background: #e0a800;
+        }
+        
+        .btn:disabled {
+            opacity: 0.5;
             cursor: not-allowed;
+            transform: none;
         }
-        .log {
-            background: #000;
-            color: #00ff00;
-            padding: 10px;
-            height: 300px;
-            overflow-y: auto;
-            font-family: monospace;
-            white-space: pre-wrap;
-        }
+        
         .status {
-            padding: 10px;
-            border-radius: 4px;
-            margin: 10px 0;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            font-weight: 600;
+            text-align: center;
         }
-        .connected {
+        
+        .status.connected {
             background: #d4edda;
             color: #155724;
-            border: 1px solid #c3e6cb;
+            border: 2px solid #c3e6cb;
         }
-        .disconnected {
+        
+        .status.disconnected {
             background: #f8d7da;
             color: #721c24;
-            border: 1px solid #f5c6cb;
+            border: 2px solid #f5c6cb;
+        }
+        
+        .button-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            margin: 20px 0;
+        }
+        
+        .log-container {
+            grid-column: 1 / -1;
+            margin-top: 20px;
+        }
+        
+        .log {
+            background: #1a1a1a;
+            color: #00ff41;
+            padding: 20px;
+            height: 400px;
+            overflow-y: auto;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 13px;
+            border-radius: 8px;
+            white-space: pre-wrap;
+            line-height: 1.4;
+        }
+        
+        .log::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        .log::-webkit-scrollbar-track {
+            background: #2a2a2a;
+        }
+        
+        .log::-webkit-scrollbar-thumb {
+            background: #00ff41;
+            border-radius: 4px;
+        }
+        
+        .emoji {
+            font-style: normal;
+        }
+        
+        .highlight {
+            background: rgba(102, 126, 234, 0.1);
+            padding: 2px 4px;
+            border-radius: 4px;
+        }
+        
+        .user-info {
+            background: rgba(102, 126, 234, 0.1);
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            font-size: 14px;
+        }
+        
+        .metrics {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        
+        .metric {
+            text-align: center;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            border: 2px solid #e9ecef;
+        }
+        
+        .metric-value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #667eea;
+        }
+        
+        .metric-label {
+            font-size: 0.9em;
+            color: #6c757d;
+            margin-top: 5px;
+        }
+
+        @media (max-width: 768px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+            
+            .button-grid {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
 <body>
-    <h1>WebSocket Client Example</h1>
-    
     <div class="container">
-        <h3>Connection</h3>
-        <div>
-            <label for="tokenInput">JWT Token:</label><br>
-            <input type="text" id="tokenInput" placeholder="Enter JWT token from nodejs-api" style="width: 500px;">
+        <div class="header">
+            <h1><span class="emoji">🚀</span> WebSocket Client</h1>
+            <p>Friends & Online Users Testing Platform</p>
         </div>
-        <div>
-            <label for="serverUrl">Server URL:</label><br>
-            <input type="text" id="serverUrl" value="ws://localhost:3001" style="width: 300px;">
-        </div>
-        <button id="connectBtn">Connect</button>
-        <button id="disconnectBtn" disabled>Disconnect</button>
-        <div id="status" class="status disconnected">Disconnected</div>
-    </div>
+        
+        <div class="main-content">
+            <!-- Connection Panel -->
+            <div class="panel">
+                <h3><span class="emoji">🔐</span> Authentication</h3>
+                <div class="form-group">
+                    <label for="tokenInput">JWT Token:</label>
+                    <input type="password" id="tokenInput" placeholder="Paste your JWT token here">
+                </div>
+                <div class="form-group">
+                    <label for="serverUrl">Server URL:</label>
+                    <input type="text" id="serverUrl" value="ws://localhost:3001">
+                </div>
+                <div class="button-grid">
+                    <button class="btn btn-primary" id="connectBtn">
+                        <span class="emoji">🔌</span> Connect
+                    </button>
+                    <button class="btn btn-secondary" id="disconnectBtn" disabled>
+                        <span class="emoji">🔌</span> Disconnect
+                    </button>
+                </div>
+                <div id="status" class="status disconnected">
+                    <span class="emoji">❌</span> Disconnected
+                </div>
+                <div id="userInfo" class="user-info" style="display: none;"></div>
+            </div>
 
-    <div class="container">
-        <h3>Actions</h3>
-        <button id="pingBtn" disabled>Ping</button>
-        <button id="getUsersBtn" disabled>Get Online Users</button>
-        <div>
-            <input type="text" id="roomInput" placeholder="Room name" disabled>
-            <button id="joinRoomBtn" disabled>Join Room</button>
-            <button id="leaveRoomBtn" disabled>Leave Room</button>
-        </div>
-    </div>
+            <!-- Actions Panel -->
+            <div class="panel">
+                <h3><span class="emoji">⚡</span> Actions</h3>
+                <div class="button-grid">
+                    <button class="btn btn-success" id="pingBtn" disabled>
+                        <span class="emoji">🏓</span> Ping
+                    </button>
+                    <button class="btn btn-warning" id="setupFriendsBtn" disabled>
+                        <span class="emoji">👥</span> Setup Friends
+                    </button>
+                </div>
+                
+                <h4 style="margin: 20px 0 10px 0; color: #495057;">
+                    <span class="emoji">👤</span> Online Users Queries
+                </h4>
+                <div class="button-grid">
+                    <button class="btn btn-primary" id="getFriendsBtn" disabled>
+                        <span class="emoji">💫</span> Friends Only
+                    </button>
+                    <button class="btn btn-primary" id="getAllUsersBtn" disabled>
+                        <span class="emoji">🌐</span> All Users
+                    </button>
+                    <button class="btn btn-primary" id="getDetailedBtn" disabled>
+                        <span class="emoji">🔍</span> Detailed Info
+                    </button>
+                    <button class="btn btn-primary" id="testAllBtn" disabled>
+                        <span class="emoji">🧪</span> Test All
+                    </button>
+                </div>
+                
+                <div class="metrics" id="metrics" style="display: none;">
+                    <div class="metric">
+                        <div class="metric-value" id="friendsCount">0</div>
+                        <div class="metric-label">Friends Online</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value" id="totalUsers">0</div>
+                        <div class="metric-label">Total Online</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value" id="sessionsCount">0</div>
+                        <div class="metric-label">Total Sessions</div>
+                    </div>
+                </div>
+            </div>
 
-    <div class="container">
-        <h3>Log</h3>
-        <button onclick="clearLog()">Clear Log</button>
-        <div id="log" class="log"></div>
+            <!-- Log Panel -->
+            <div class="log-container">
+                <div class="panel">
+                    <h3>
+                        <span class="emoji">📋</span> Activity Log
+                        <button class="btn btn-secondary" onclick="clearLog()" style="float: right; margin-top: -5px;">
+                            <span class="emoji">🗑️</span> Clear
+                        </button>
+                    </h3>
+                    <div id="log" class="log"></div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
         let socket = null;
         let isConnected = false;
+        let currentUser = null;
 
-        const tokenInput = document.getElementById('tokenInput');
-        const serverUrl = document.getElementById('serverUrl');
-        const connectBtn = document.getElementById('connectBtn');
-        const disconnectBtn = document.getElementById('disconnectBtn');
-        const status = document.getElementById('status');
-        const log = document.getElementById('log');
-        const pingBtn = document.getElementById('pingBtn');
-        const getUsersBtn = document.getElementById('getUsersBtn');
-        const roomInput = document.getElementById('roomInput');
-        const joinRoomBtn = document.getElementById('joinRoomBtn');
-        const leaveRoomBtn = document.getElementById('leaveRoomBtn');
+        const elements = {
+            tokenInput: document.getElementById('tokenInput'),
+            serverUrl: document.getElementById('serverUrl'),
+            connectBtn: document.getElementById('connectBtn'),
+            disconnectBtn: document.getElementById('disconnectBtn'),
+            status: document.getElementById('status'),
+            userInfo: document.getElementById('userInfo'),
+            log: document.getElementById('log'),
+            pingBtn: document.getElementById('pingBtn'),
+            setupFriendsBtn: document.getElementById('setupFriendsBtn'),
+            getFriendsBtn: document.getElementById('getFriendsBtn'),
+            getAllUsersBtn: document.getElementById('getAllUsersBtn'),
+            getDetailedBtn: document.getElementById('getDetailedBtn'),
+            testAllBtn: document.getElementById('testAllBtn'),
+            metrics: document.getElementById('metrics'),
+            friendsCount: document.getElementById('friendsCount'),
+            totalUsers: document.getElementById('totalUsers'),
+            sessionsCount: document.getElementById('sessionsCount')
+        };
 
-        function logMessage(message) {
+        function logMessage(message, type = 'info') {
             const timestamp = new Date().toLocaleTimeString();
-            log.textContent += `[${timestamp}] ${message}\n`;
-            log.scrollTop = log.scrollHeight;
+            const emoji = type === 'error' ? '❌' : type === 'success' ? '✅' : type === 'info' ? 'ℹ️' : '📝';
+            elements.log.textContent += `[${timestamp}] ${emoji} ${message}\n`;
+            elements.log.scrollTop = elements.log.scrollHeight;
         }
 
         function clearLog() {
-            log.textContent = '';
+            elements.log.textContent = '';
+            logMessage('Log cleared', 'info');
         }
 
-        function updateConnectionStatus(connected) {
+        function updateConnectionStatus(connected, user = null) {
             isConnected = connected;
+            currentUser = user;
+            
             if (connected) {
-                status.textContent = 'Connected';
-                status.className = 'status connected';
-                connectBtn.disabled = true;
-                disconnectBtn.disabled = false;
-                pingBtn.disabled = false;
-                getUsersBtn.disabled = false;
-                roomInput.disabled = false;
-                joinRoomBtn.disabled = false;
-                leaveRoomBtn.disabled = false;
+                elements.status.innerHTML = '<span class="emoji">✅</span> Connected';
+                elements.status.className = 'status connected';
+                elements.connectBtn.disabled = true;
+                elements.disconnectBtn.disabled = false;
+                elements.pingBtn.disabled = false;
+                elements.setupFriendsBtn.disabled = false;
+                elements.getFriendsBtn.disabled = false;
+                elements.getAllUsersBtn.disabled = false;
+                elements.getDetailedBtn.disabled = false;
+                elements.testAllBtn.disabled = false;
+                
+                if (user) {
+                    elements.userInfo.style.display = 'block';
+                    elements.userInfo.innerHTML = `
+                        <strong>👤 ${user.email}</strong><br>
+                        <span class="highlight">User ID:</span> ${user.userId}<br>
+                        <span class="highlight">Socket ID:</span> ${user.socketId}
+                    `;
+                }
+                elements.metrics.style.display = 'grid';
             } else {
-                status.textContent = 'Disconnected';
-                status.className = 'status disconnected';
-                connectBtn.disabled = false;
-                disconnectBtn.disabled = true;
-                pingBtn.disabled = true;
-                getUsersBtn.disabled = true;
-                roomInput.disabled = true;
-                joinRoomBtn.disabled = true;
-                leaveRoomBtn.disabled = true;
+                elements.status.innerHTML = '<span class="emoji">❌</span> Disconnected';
+                elements.status.className = 'status disconnected';
+                elements.connectBtn.disabled = false;
+                elements.disconnectBtn.disabled = true;
+                elements.pingBtn.disabled = true;
+                elements.setupFriendsBtn.disabled = true;
+                elements.getFriendsBtn.disabled = true;
+                elements.getAllUsersBtn.disabled = true;
+                elements.getDetailedBtn.disabled = true;
+                elements.testAllBtn.disabled = true;
+                elements.userInfo.style.display = 'none';
+                elements.metrics.style.display = 'none';
             }
         }
 
-        connectBtn.addEventListener('click', () => {
-            const token = tokenInput.value.trim();
-            const url = serverUrl.value.trim();
+        function updateMetrics(friends = 0, total = 0, sessions = 0) {
+            elements.friendsCount.textContent = friends;
+            elements.totalUsers.textContent = total;
+            elements.sessionsCount.textContent = sessions;
+        }
+
+        elements.connectBtn.addEventListener('click', () => {
+            const token = elements.tokenInput.value.trim();
+            const url = elements.serverUrl.value.trim();
 
             if (!token) {
                 alert('Please enter a JWT token');
                 return;
             }
 
-            logMessage('Connecting to ' + url + '...');
+            logMessage(`Connecting to ${url}...`, 'info');
 
             socket = io(url, {
-                auth: {
-                    token: token.startsWith('Bearer ') ? token : 'Bearer ' + token
-                }
+                transports: ['websocket'],
+                reconnection: true,
+                reconnectionAttempts: 5,
+                reconnectionDelay: 1000
             });
 
             socket.on('connect', () => {
-                logMessage('Socket connected with ID: ' + socket.id);
-                updateConnectionStatus(true);
+                logMessage(`Socket connected! ID: ${socket.id}`, 'success');
+                
+                // Send authentication request
+                logMessage('Sending authentication...', 'info');
+                socket.emit('authenticate', { token });
             });
 
             socket.on('connected', (data) => {
-                logMessage('Server confirmed connection: ' + JSON.stringify(data, null, 2));
+                logMessage(`Authentication successful! Welcome, ${data.user.email}`, 'success');
+                updateConnectionStatus(true, data.user);
             });
 
-            socket.on('disconnect', () => {
-                logMessage('Socket disconnected');
+            socket.on('disconnect', (reason) => {
+                logMessage(`Disconnected: ${reason}`, 'error');
+                updateConnectionStatus(false);
+            });
+
+            socket.on('connect_error', (error) => {
+                logMessage(`Connection error: ${error.message}`, 'error');
                 updateConnectionStatus(false);
             });
 
             socket.on('error', (error) => {
-                logMessage('Error: ' + JSON.stringify(error, null, 2));
-            });
-
-            socket.on('pong', (data) => {
-                logMessage('Pong received: ' + JSON.stringify(data, null, 2));
+                logMessage(`Socket error: ${JSON.stringify(error)}`, 'error');
             });
 
             socket.on('user_status_update', (data) => {
-                logMessage('User status update: ' + JSON.stringify(data, null, 2));
-            });
-
-            socket.on('online_users', (data) => {
-                logMessage('Online users: ' + JSON.stringify(data, null, 2));
-            });
-
-            socket.on('joined_room', (data) => {
-                logMessage('Joined room: ' + JSON.stringify(data, null, 2));
-            });
-
-            socket.on('left_room', (data) => {
-                logMessage('Left room: ' + JSON.stringify(data, null, 2));
-            });
-
-            socket.on('user_joined_room', (data) => {
-                logMessage('User joined room: ' + JSON.stringify(data, null, 2));
-            });
-
-            socket.on('user_left_room', (data) => {
-                logMessage('User left room: ' + JSON.stringify(data, null, 2));
-            });
-
-            socket.on('connect_error', (error) => {
-                logMessage('Connection error: ' + error.message);
-                updateConnectionStatus(false);
+                logMessage(`📢 Friend Status: ${data.email || data.userId} is now ${data.status}`, 'info');
             });
         });
 
-        disconnectBtn.addEventListener('click', () => {
+        elements.disconnectBtn.addEventListener('click', () => {
             if (socket) {
                 socket.disconnect();
                 socket = null;
+                logMessage('Manually disconnected', 'info');
             }
         });
 
-        pingBtn.addEventListener('click', () => {
+        elements.pingBtn.addEventListener('click', () => {
             if (socket && isConnected) {
-                logMessage('Sending ping...');
-                socket.emit('ping');
+                logMessage('Sending ping...', 'info');
+                socket.emit('ping', (response) => {
+                    if (response && response.timestamp) {
+                        const time = new Date(response.timestamp).toLocaleTimeString();
+                        logMessage(`🏓 Pong received at ${time}`, 'success');
+                    } else {
+                        logMessage(`🏓 Pong: ${JSON.stringify(response)}`, 'success');
+                    }
+                });
             }
         });
 
-        getUsersBtn.addEventListener('click', () => {
+        elements.setupFriendsBtn.addEventListener('click', async () => {
+            logMessage('Setting up test friend data...', 'info');
+            
+            try {
+                // This would need to be implemented on the server side or through Redis directly
+                logMessage('⚠️ Friend setup needs to be done through Redis directly', 'info');
+                logMessage('Run this Redis command:', 'info');
+                logMessage('SET friends:683d6aaedb525b175ea8ee40 \'[{"_id":"683d6adfdb525b175ea8ee46","email":"jigisha.kb.patel@gmail.com","userId":"jigisha.patel"}]\'', 'info');
+            } catch (error) {
+                logMessage(`Friend setup error: ${error.message}`, 'error');
+            }
+        });
+
+        elements.getFriendsBtn.addEventListener('click', () => {
             if (socket && isConnected) {
-                logMessage('Requesting online users...');
-                socket.emit('get_online_users');
+                logMessage('Getting online friends...', 'info');
+                socket.emit('get_online_users', (response) => {
+                    logMessage(`📱 Online Friends (${response.users ? response.users.length : 0})`, 'success');
+                    if (response.users && response.users.length > 0) {
+                        response.users.forEach(user => {
+                            logMessage(`  👤 ${user.email} (${user.userId})`, 'info');
+                        });
+                    } else {
+                        logMessage('  No friends online', 'info');
+                    }
+                    updateMetrics(response.users ? response.users.length : 0, null, null);
+                });
             }
         });
 
-        joinRoomBtn.addEventListener('click', () => {
-            const roomName = roomInput.value.trim();
-            if (socket && isConnected && roomName) {
-                logMessage('Joining room: ' + roomName);
-                socket.emit('join_room', { room: roomName });
-            } else if (!roomName) {
-                alert('Please enter a room name');
+        elements.getAllUsersBtn.addEventListener('click', () => {
+            if (socket && isConnected) {
+                logMessage('Getting all online users...', 'info');
+                socket.emit('get_all_online_users', (response) => {
+                    logMessage(`🌐 All Online Users (${response.total || 0})`, 'success');
+                    if (response.users && response.users.length > 0) {
+                        response.users.forEach(user => {
+                            logMessage(`  👤 ${user.userId} - ${user.status}`, 'info');
+                        });
+                    } else {
+                        logMessage('  No users online', 'info');
+                    }
+                    updateMetrics(null, response.total || 0, null);
+                });
             }
         });
 
-        leaveRoomBtn.addEventListener('click', () => {
-            const roomName = roomInput.value.trim();
-            if (socket && isConnected && roomName) {
-                logMessage('Leaving room: ' + roomName);
-                socket.emit('leave_room', { room: roomName });
-            } else if (!roomName) {
-                alert('Please enter a room name');
+        elements.getDetailedBtn.addEventListener('click', () => {
+            if (socket && isConnected) {
+                logMessage('Getting detailed online users...', 'info');
+                socket.emit('get_detailed_online_users', (response) => {
+                    logMessage(`🔍 Detailed Users (${response.total || 0})`, 'success');
+                    let totalSessions = 0;
+                    if (response.users && response.users.length > 0) {
+                        response.users.forEach(user => {
+                            logMessage(`  👤 ${user.email || 'N/A'} (${user.userId})`, 'info');
+                            logMessage(`     Status: ${user.status}, Sessions: ${user.sessionCount}`, 'info');
+                            totalSessions += user.sessionCount || 0;
+                        });
+                    } else {
+                        logMessage('  No users online', 'info');
+                    }
+                    updateMetrics(null, response.total || 0, totalSessions);
+                });
+            }
+        });
+
+        elements.testAllBtn.addEventListener('click', () => {
+            if (socket && isConnected) {
+                logMessage('🧪 Testing all online users functionality...', 'info');
+                
+                // Test 1: Friends
+                setTimeout(() => {
+                    logMessage('1️⃣ Testing get_online_users (friends)...', 'info');
+                    socket.emit('get_online_users', (response) => {
+                        logMessage(`✅ Friends: ${response.users ? response.users.length : 0} online`, 'success');
+                    });
+                }, 500);
+                
+                // Test 2: All users
+                setTimeout(() => {
+                    logMessage('2️⃣ Testing get_all_online_users...', 'info');
+                    socket.emit('get_all_online_users', (response) => {
+                        logMessage(`✅ All users: ${response.total || 0} online`, 'success');
+                    });
+                }, 1500);
+                
+                // Test 3: Detailed
+                setTimeout(() => {
+                    logMessage('3️⃣ Testing get_detailed_online_users...', 'info');
+                    socket.emit('get_detailed_online_users', (response) => {
+                        const totalSessions = response.users ? response.users.reduce((sum, user) => sum + (user.sessionCount || 0), 0) : 0;
+                        logMessage(`✅ Detailed: ${response.total || 0} users, ${totalSessions} sessions`, 'success');
+                        updateMetrics(null, response.total || 0, totalSessions);
+                    });
+                }, 2500);
+                
+                // Test 4: Friends explicit
+                setTimeout(() => {
+                    logMessage('4️⃣ Testing get_online_friends_only...', 'info');
+                    socket.emit('get_online_friends_only', (response) => {
+                        logMessage(`✅ Friends only: ${response.users ? response.users.length : 0} online`, 'success');
+                        logMessage('🎉 All tests completed!', 'success');
+                    });
+                }, 3500);
             }
         });
 
         // Initialize
         updateConnectionStatus(false);
-        logMessage('WebSocket client ready. Enter your JWT token and click Connect.');
-        logMessage('To get a JWT token, login to the nodejs-api at http://localhost:8080/api-docs');
+        logMessage('🚀 WebSocket client ready!', 'success');
+        logMessage('Enter your JWT token and click Connect to begin.', 'info');
+        logMessage('To get a JWT token, login at http://localhost:8080/api-docs', 'info');
     </script>
 </body>
 </html> 

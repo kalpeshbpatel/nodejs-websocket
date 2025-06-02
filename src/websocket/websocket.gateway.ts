@@ -255,4 +255,67 @@ export class AppWebSocketGateway implements OnGatewayInit, OnGatewayConnection, 
       return { users: [] };
     }
   }
+
+  @SubscribeMessage('get_all_online_users')
+  async handleGetAllOnlineUsers(client: Socket) {
+    try {
+      const user = client.data.user;
+      if (!user) {
+        return { users: [] };
+      }
+
+      // Get all online users (basic info only)
+      const onlineUsers = await this.redisService.getAllOnlineUsers();
+
+      return { 
+        users: onlineUsers.map(user => ({
+          userId: user.userId,
+          status: user.status,
+          lastSeen: user.lastSeen
+        })),
+        total: onlineUsers.length 
+      };
+    } catch (error) {
+      this.logger.error('Error getting all online users:', error);
+      return { users: [], total: 0 };
+    }
+  }
+
+  @SubscribeMessage('get_detailed_online_users')
+  async handleGetDetailedOnlineUsers(client: Socket) {
+    try {
+      const user = client.data.user;
+      if (!user) {
+        return { users: [] };
+      }
+
+      // Get detailed online users info (including email and session count)
+      const detailedUsers = await this.redisService.getDetailedOnlineUsers();
+
+      return { 
+        users: detailedUsers,
+        total: detailedUsers.length,
+        timestamp: new Date().toISOString()
+      };
+    } catch (error) {
+      this.logger.error('Error getting detailed online users:', error);
+      return { users: [], total: 0 };
+    }
+  }
+
+  @SubscribeMessage('get_online_friends_only')
+  async handleGetOnlineFriendsOnly(client: Socket) {
+    try {
+      const user = client.data.user;
+      if (!user) {
+        return { users: [] };
+      }
+
+      // This is the same as the default get_online_users but with explicit naming
+      return await this.handleGetOnlineUsers(client);
+    } catch (error) {
+      this.logger.error('Error getting online friends only:', error);
+      return { users: [] };
+    }
+  }
 } 

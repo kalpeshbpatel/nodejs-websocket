@@ -1,467 +1,193 @@
-# WebSocket Server
+# WebSocket Friends & Online Users Server
 
-A real-time WebSocket server built with NestJS, Socket.IO, Redis Pub/Sub, and JWT authentication. This server provides real-time communication capabilities and integrates with the existing nodejs-api for user authentication.
+A privacy-focused NestJS WebSocket server that implements friend-based status updates and multiple online user query types with different privacy levels.
 
-## 🚀 Features
+## 🎯 Key Features
 
-### Core Features
+### Privacy-Focused Design
 
-- **WebSocket Server** - Real-time bidirectional communication using Socket.IO
-- **JWT Authentication** - Secure WebSocket connections using JWT tokens from nodejs-api
-- **Redis Pub/Sub** - Distributed messaging and user status management
-- **Online/Offline Status** - Real-time user presence tracking
-- **Room Management** - Join and leave custom rooms for group communication
-- **Session Management** - Multi-device session tracking
-- **Comprehensive Logging** - Winston-based logging with multiple levels
-- **Docker Support** - Complete containerization with Docker Compose
-- **Security** - Helmet.js security headers and CORS configuration
+- **Friend-only status updates**: Users only receive status updates from their friends, not all users
+- **Multiple privacy levels**: Different online user queries for different use cases
+- **Session tracking**: Track multiple sessions per user
 
-### WebSocket Events
+### Online User Query Types
 
-#### Authentication Events
+1. **Friends Only** (`get_online_users`) - High privacy, returns only friends who are online
+2. **All Users Basic** (`get_all_online_users`) - Medium privacy, basic info for all online users
+3. **Detailed Users** (`get_detailed_online_users`) - Low privacy, full details including emails and session counts
+4. **Explicit Friends** (`get_online_friends_only`) - Alternative friends-only endpoint
 
-- `connected` - Successful connection confirmation
-- `authentication_failed` - Authentication failure
+### Real-time Features
 
-#### Status Events
-
-- `user_status_update` - User online/offline status changes (sent only to friends)
-- `online_users` - List of currently online friends (not all users)
-
-#### Room Events
-
-- `join_room` - Join a specific room
-- `leave_room` - Leave a specific room
-- `joined_room` - Confirmation of joining a room
-- `left_room` - Confirmation of leaving a room
-- `user_joined_room` - Notification when another user joins
-- `user_left_room` - Notification when another user leaves
-
-#### Utility Events
-
-- `ping` - Health check ping
-- `pong` - Health check response
-- `error` - Error notifications
-
-#### Friend-Based Privacy
-
-The WebSocket server now implements friend-based privacy for status updates:
-
-- **Status Updates**: When a user comes online or goes offline, only their friends receive the `user_status_update` event
-- **Online Users**: The `get_online_users` event returns only friends who are online, not all online users
-- **Friend Data**: Friend relationships are stored in Redis with the key pattern `friends:userId`
-
-##### Friend Data Format in Redis
-
-```json
-{
-  "key": "friends:683d6aaedb525b175ea8ee40",
-  "value": [
-    {
-      "_id": "683d6adfdb525b175ea8ee46",
-      "email": "jigisha.kb.patel@gmail.com",
-      "userId": "jigisha.patel"
-    }
-  ]
-}
-```
-
-##### Setting Up Friend Data
-
-You can use the example script to set up test friend data:
-
-```bash
-node examples/test-friends.js
-```
-
-## 📋 Prerequisites
-
-- **Node.js** (v18 or higher)
-- **Docker & Docker Compose**
-- **Redis** (v6.0 or higher)
-- **Running nodejs-api** (for JWT token generation)
+- JWT-based authentication
+- Live friend status updates (online/offline)
+- Session management with Redis
+- Connection monitoring
 
 ## 🚀 Quick Start
 
-### Using Docker Compose (Recommended)
-
-1. **Clone the repository:**
+### 1. Start the Server
 
 ```bash
-git clone <repository-url>
-cd nodejs-websocket
-```
-
-2. **Start the application:**
-
-```bash
-docker-compose up -d
-```
-
-3. **Access the WebSocket server:**
-
-- **WebSocket URL:** ws://localhost:3001
-- **HTTP Health Check:** http://localhost:3001
-
-### Local Development Setup
-
-1. **Install dependencies:**
-
-```bash
+# Install dependencies
 npm install
-```
 
-2. **Create environment file:**
+# Start Redis (required)
+docker-compose up redis -d
 
-```env
-# Application
-PORT=3001
-NODE_ENV=development
-
-# Authentication
-JWT_SECRET=1QkF64bMBdCN68KqSeEI6A1w5ObNuAX9q839d76D+no=
-JWT_ACCESS_TOKEN_EXPIRATION=1h
-
-# Redis
-REDIS_HOST=localhost
-REDIS_PORT=6379
-REDIS_PASSWORD=your-redis-password
-
-# API Integration
-API_BASE_URL=http://localhost:8080
-
-# Logging
-LOG_LEVEL_FILE=debug
-LOG_LEVEL_CONSOLE=info
-
-# CORS
-CORS_ORIGIN=*
-```
-
-3. **Start development server:**
-
-```bash
+# Start the WebSocket server
 npm run start:dev
 ```
 
-## 🔌 Client Connection
+Server runs on `ws://localhost:3001`
 
-### Authentication
-
-WebSocket connections require JWT authentication. You can pass the token in several ways:
-
-#### 1. Authentication Header (Recommended)
-
-```javascript
-const socket = io("ws://localhost:3001", {
-  auth: {
-    token: "Bearer your-jwt-token",
-  },
-});
-```
-
-#### 2. Query Parameter
-
-```javascript
-const socket = io("ws://localhost:3001", {
-  query: {
-    token: "Bearer your-jwt-token",
-  },
-});
-```
-
-#### 3. Authorization Header
-
-```javascript
-const socket = io("ws://localhost:3001", {
-  extraHeaders: {
-    Authorization: "Bearer your-jwt-token",
-  },
-});
-```
-
-### Basic Client Example
-
-```javascript
-import { io } from "socket.io-client";
-
-// Connect with JWT token (get this from nodejs-api login)
-const socket = io("ws://localhost:3001", {
-  auth: {
-    token: "Bearer your-jwt-token-from-api",
-  },
-});
-
-// Connection events
-socket.on("connected", (data) => {
-  console.log("Connected to WebSocket server:", data);
-});
-
-socket.on("user_status_update", (data) => {
-  console.log("User status update:", data);
-});
-
-// Join a room
-socket.emit("join_room", { room: "general" });
-
-socket.on("joined_room", (data) => {
-  console.log("Joined room:", data);
-});
-
-// Send ping
-socket.emit("ping");
-
-socket.on("pong", (data) => {
-  console.log("Pong received:", data);
-});
-
-// Handle errors
-socket.on("error", (error) => {
-  console.error("WebSocket error:", error);
-});
-```
-
-### React Example
-
-```jsx
-import React, { useEffect, useState } from "react";
-import { io } from "socket.io-client";
-
-function WebSocketComponent({ jwtToken }) {
-  const [socket, setSocket] = useState(null);
-  const [connected, setConnected] = useState(false);
-  const [onlineUsers, setOnlineUsers] = useState([]);
-
-  useEffect(() => {
-    if (!jwtToken) return;
-
-    const newSocket = io("ws://localhost:3001", {
-      auth: {
-        token: `Bearer ${jwtToken}`,
-      },
-    });
-
-    newSocket.on("connected", (data) => {
-      console.log("Connected:", data);
-      setConnected(true);
-    });
-
-    newSocket.on("user_status_update", (data) => {
-      console.log("Status update:", data);
-      // Update your user list here
-    });
-
-    newSocket.on("error", (error) => {
-      console.error("Socket error:", error);
-      setConnected(false);
-    });
-
-    setSocket(newSocket);
-
-    return () => {
-      newSocket.close();
-    };
-  }, [jwtToken]);
-
-  const joinRoom = (roomName) => {
-    if (socket) {
-      socket.emit("join_room", { room: roomName });
-    }
-  };
-
-  return (
-    <div>
-      <h3>WebSocket Status: {connected ? "Connected" : "Disconnected"}</h3>
-      <button onClick={() => joinRoom("general")}>Join General Room</button>
-    </div>
-  );
-}
-
-export default WebSocketComponent;
-```
-
-## 🛠️ Integration with nodejs-api
-
-### Step 1: Get JWT Token
-
-First, authenticate with the nodejs-api to get a JWT token:
+### 2. Test with HTML Client
 
 ```bash
-# Register or login to get JWT token
-curl -X POST http://localhost:8080/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{
-    "userId": "your-user-id",
-    "password": "your-password"
-  }'
+# Start the beautiful HTML client
+npm run serve
 ```
 
-### Step 2: Use Token with WebSocket
+This opens `http://localhost:8081` with a modern WebSocket testing interface.
 
-Use the received `access_token` to connect to the WebSocket server:
+### 3. Get a JWT Token
 
-```javascript
-const response = await fetch("http://localhost:8080/api/auth/login", {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-  },
-  body: JSON.stringify({
-    userId: "your-user-id",
-    password: "your-password",
-  }),
-});
+1. Go to your Node.js API at `http://localhost:8080/api-docs`
+2. Login to get a JWT token
+3. Use the token in the HTML client
 
-const { access_token } = await response.json();
+## 🎨 HTML Client Features
 
-// Connect to WebSocket with the token
-const socket = io("ws://localhost:3001", {
-  auth: {
-    token: `Bearer ${access_token}`,
-  },
-});
+The included HTML client (`examples/client.html`) provides:
+
+- **🔐 Authentication**: Secure JWT login
+- **👥 Friend Testing**: Test all friend-related functionality
+- **📊 Privacy Levels**: Compare different online user queries
+- **📱 Real-time Updates**: Live friend status notifications
+- **🎯 Testing Tools**: Ping, metrics dashboard, activity logs
+- **🎨 Modern UI**: Beautiful responsive design with gradients and emojis
+
+![WebSocket Client Screenshot](placeholder-for-screenshot)
+
+## 📊 Privacy Levels Comparison
+
+| Query Type                  | Privacy Level | Response Includes             | Use Case                      |
+| --------------------------- | ------------- | ----------------------------- | ----------------------------- |
+| `get_online_users`          | **High**      | Friends only + full details   | Social features, friend lists |
+| `get_all_online_users`      | **Medium**    | All users + basic info only   | Analytics, user counts        |
+| `get_detailed_online_users` | **Low**       | All users + emails + sessions | Admin panels, monitoring      |
+| `get_online_friends_only`   | **High**      | Friends only (explicit)       | Alternative friends endpoint  |
+
+## 🗃️ Data Structure
+
+### Redis Friend Storage
+
+```json
+friends:683d6aaedb525b175ea8ee40 = [
+  {
+    "_id": "683d6adfdb525b175ea8ee46",
+    "email": "jigisha.kb.patel@gmail.com",
+    "userId": "jigisha.patel"
+  }
+]
 ```
 
-## 📊 Redis Integration
+### WebSocket Events
 
-The WebSocket server uses Redis for:
+#### Client → Server
 
-### Pub/Sub Channels
+- `authenticate` - Login with JWT token
+- `ping` - Test connectivity
+- `get_online_users` - Get online friends (default)
+- `get_all_online_users` - Get all online users (basic)
+- `get_detailed_online_users` - Get detailed user info
+- `get_online_friends_only` - Get online friends (explicit)
 
-- `user:status:update` - User online/offline status changes
-- Custom channels can be added for specific features
+#### Server → Client
 
-### Data Storage
+- `connected` - Authentication successful
+- `user_status_update` - Friend status changed
+- Response callbacks for all queries
 
-- `user:{userId}:status` - User online status and last seen
-- `user:{userId}:session:{socketId}` - User session data
+## 🔧 Setup Friend Data
 
-### Redis Commands Example
+Use Redis CLI or the HTML client instructions:
 
 ```bash
-# Check user status
-redis-cli GET "user:john.doe:status"
+# User A friends User B
+SET friends:683d6aaedb525b175ea8ee40 '[{"_id":"683d6adfdb525b175ea8ee46","email":"jigisha.kb.patel@gmail.com","userId":"jigisha.patel"}]'
 
-# Check all user sessions
-redis-cli KEYS "user:john.doe:session:*"
-
-# Subscribe to status updates
-redis-cli SUBSCRIBE "user:status:update"
+# User B friends User A
+SET friends:683d6adfdb525b175ea8ee46 '[{"_id":"683d6aaedb525b175ea8ee40","email":"user.a@example.com","userId":"user.a"}]'
 ```
 
-## 🔧 Development
-
-### Available Scripts
-
-```bash
-# Development
-npm run start:dev          # Start in development mode with hot reload
-npm run start:debug        # Start in debug mode
-
-# Production
-npm run build              # Build the application
-npm run start:prod         # Start in production mode
-
-# Testing
-npm run test               # Run unit tests
-npm run test:watch         # Run tests in watch mode
-npm run test:cov           # Run tests with coverage
-
-# Code Quality
-npm run lint               # Run ESLint
-npm run format             # Format code with Prettier
-```
-
-### Project Structure
+## 🏗️ Architecture
 
 ```
-nodejs-websocket/
-├── src/
-│   ├── auth/                 # JWT WebSocket authentication
-│   │   └── jwt-ws.guard.ts   # WebSocket JWT guard
-│   ├── config/               # Configuration
-│   │   └── configuration.ts  # Environment configuration
-│   ├── logger/               # Logging service
-│   │   ├── logger.service.ts # Winston logger
-│   │   └── logger.module.ts  # Logger module
-│   ├── redis/                # Redis service
-│   │   └── redis.service.ts  # Redis pub/sub service
-│   ├── websocket/            # WebSocket gateway
-│   │   └── websocket.gateway.ts # Main WebSocket gateway
-│   ├── app.module.ts         # Main app module
-│   └── main.ts              # Application bootstrap
-├── logs/                    # Log files
-├── Dockerfile              # Docker configuration
-├── docker-compose.yml      # Docker Compose configuration
-└── package.json            # Dependencies and scripts
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│   HTML Client   │◄──►│  WebSocket Server │◄──►│   Redis Store   │
+│                 │    │                  │    │                 │
+│ • Authentication│    │ • Friend Privacy │    │ • Friend Data   │
+│ • Real-time UI  │    │ • Session Mgmt   │    │ • User Status   │
+│ • Testing Tools │    │ • Status Updates │    │ • Session Info  │
+└─────────────────┘    └──────────────────┘    └─────────────────┘
 ```
 
-### Environment Variables
+## 📁 Project Structure
 
-| Variable                      | Description       | Default                 |
-| ----------------------------- | ----------------- | ----------------------- |
-| `PORT`                        | Server port       | `3001`                  |
-| `NODE_ENV`                    | Environment       | `development`           |
-| `JWT_SECRET`                  | JWT secret key    | (required)              |
-| `JWT_ACCESS_TOKEN_EXPIRATION` | Token expiration  | `1h`                    |
-| `REDIS_HOST`                  | Redis host        | `localhost`             |
-| `REDIS_PORT`                  | Redis port        | `6379`                  |
-| `REDIS_PASSWORD`              | Redis password    | (optional)              |
-| `API_BASE_URL`                | nodejs-api URL    | `http://localhost:8080` |
-| `LOG_LEVEL_FILE`              | File log level    | `debug`                 |
-| `LOG_LEVEL_CONSOLE`           | Console log level | `info`                  |
-| `CORS_ORIGIN`                 | CORS origin       | `*`                     |
+```
+src/
+├── websocket/
+│   ├── websocket.gateway.ts    # Main WebSocket handlers
+│   └── websocket.module.ts     # WebSocket module
+├── redis/
+│   ├── redis.service.ts        # Redis operations
+│   └── redis.module.ts         # Redis module
+└── main.ts                     # Server entry point
 
-## 🚀 Deployment
-
-### Production Deployment
-
-1. **Build and start with Docker Compose:**
-
-```bash
-docker-compose -f docker-compose.yml up -d
+examples/
+├── client.html                 # Modern HTML client
+└── README.md                   # Client documentation
 ```
 
-2. **Or build manually:**
+## 🧪 Testing Scenarios
 
-```bash
-npm run build
-NODE_ENV=production npm run start:prod
-```
+### 1. Privacy Testing
 
-### Health Checks
+1. Open multiple browser tabs with different user tokens
+2. Use "Test All" to compare privacy levels
+3. Verify friends-only behavior vs all-users queries
 
-The server provides basic health checks:
+### 2. Real-time Updates
 
-- **WebSocket Ping/Pong:** Use the `ping` event to check connection
-- **HTTP Health Check:** Access `http://localhost:3001` for basic status
+1. Connect two users who are friends
+2. Close one browser tab
+3. Watch the other receive offline status update
 
-## 🔒 Security
+### 3. Session Management
 
-- **JWT Authentication:** All WebSocket connections require valid JWT tokens
-- **CORS Configuration:** Configurable CORS settings
-- **Helmet.js:** Security headers for HTTP requests
-- **Input Validation:** All incoming data is validated
-- **Rate Limiting:** Can be added using Redis-based rate limiting
+1. Open multiple tabs with same user token
+2. Use "Detailed Info" to see session counts
+3. Close tabs and verify session cleanup
 
-## 📝 Logging
+## 🔒 Security Features
 
-Logs are written to:
+- **JWT Authentication**: All connections require valid JWT tokens
+- **Friend-based Privacy**: Status updates only sent to friends
+- **Session Isolation**: Each browser tab = separate session
+- **Error Handling**: Graceful handling of invalid tokens/connections
 
-- **Console:** Configurable level (default: info)
-- **File:** `logs/websocket-server.log` (configurable level, default: debug)
-- **Error File:** `logs/websocket-error.log` (errors only)
+## 🚦 Status
 
-Log levels: `error`, `warn`, `info`, `debug`, `verbose`
+- ✅ **Production Ready**: Comprehensive error handling and logging
+- ✅ **Privacy Compliant**: Friend-based status updates only
+- ✅ **Scalable**: Redis-based session and friend management
+- ✅ **Well Tested**: HTML client with comprehensive testing tools
 
-## 🤝 Contributing
+## 📖 Documentation
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
+- [HTML Client Guide](examples/README.md) - Complete client documentation
+- [Online Users Guide](ONLINE_USERS_GUIDE.md) - Privacy levels explained
+- API docs available at runtime
 
-## 📄 License
-
-This project is licensed under the ISC License.
+Perfect for social applications requiring privacy-focused real-time communication! 🎉
