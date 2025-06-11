@@ -14,7 +14,9 @@ export default () => ({
     db: process.env.REDIS_DB ? parseInt(process.env.REDIS_DB, 10) : 0,
     retryStrategy: (times: number) => Math.min(times * 50, 2000),
     enableReadyCheck: true,
-    maxRetriesPerRequest: 3
+    maxRetriesPerRequest: 3,
+    sessionExpiry: process.env.SESSION_EXPIRY ? parseInt(process.env.SESSION_EXPIRY, 10) : 24 * 60 * 60, // 24 hours in seconds
+    idleTimeout: process.env.IDLE_TIMEOUT ? parseInt(process.env.IDLE_TIMEOUT, 10) : 30 * 60, // 30 minutes in seconds
   },
   cors: {
     origin: process.env.CORS_ORIGIN || '*',

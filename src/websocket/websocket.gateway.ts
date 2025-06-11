@@ -35,11 +35,17 @@ export class AppWebSocketGateway implements OnGatewayInit, OnGatewayConnection, 
   server!: Server;
 
   private readonly logger = new Logger(AppWebSocketGateway.name);
+  private cleanupInterval: NodeJS.Timeout;
 
   constructor(
     private readonly redisService: RedisService,
     private readonly jwtService: JwtService
-  ) {}
+  ) {
+    // Start periodic cleanup of idle sessions (every 5 minutes)
+    this.cleanupInterval = setInterval(async () => {
+      await this.redisService.cleanupIdleSessions();
+    }, 5 * 60 * 1000);
+  }
 
   async afterInit(server: Server) {
     this.logger.log('WebSocket Gateway initialized');
@@ -208,8 +214,18 @@ export class AppWebSocketGateway implements OnGatewayInit, OnGatewayConnection, 
   }
 
   @SubscribeMessage('ping')
-  handlePing(client: Socket) {
-    return { timestamp: new Date().toISOString() };
+  async handlePing(client: Socket) {
+    try {
+      const user = client.data.user;
+      if (user) {
+        // Update session activity on ping
+        await this.redisService.updateSessionActivity(user.userId, client.id);
+      }
+      return { timestamp: new Date().toISOString() };
+    } catch (error) {
+      this.logger.error(`Error handling ping for socket ${client.id}:`, error);
+      return { timestamp: new Date().toISOString() };
+    }
   }
 
   @SubscribeMessage('get_online_users')
@@ -350,6 +366,12 @@ export class AppWebSocketGateway implements OnGatewayInit, OnGatewayConnection, 
     }
   ) {
     try {
+      // Update sender's session activity
+      const user = client.data.user;
+      if (user) {
+        await this.redisService.updateSessionActivity(user.userId, client.id);
+      }
+
       // Debug user status before processing message
       await this.debugUserStatus(data.recipientId);
 
@@ -408,6 +430,12 @@ export class AppWebSocketGateway implements OnGatewayInit, OnGatewayConnection, 
         error: errorMessage,
         timestamp: new Date().toISOString()
       };
+    }
+  }
+
+  async onModuleDestroy() {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
     }
   }
 } 

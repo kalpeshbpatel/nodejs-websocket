@@ -10,7 +10,8 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   private redisPublisher!: Redis | Cluster;
   private readonly logger = new Logger(RedisService.name);
   private readonly poolSize = 10;
-  private readonly sessionExpiry = 24 * 60 * 60; // 24 hours in seconds
+  private readonly sessionExpiry = process.env.SESSION_EXPIRY ? parseInt(process.env.SESSION_EXPIRY, 10) : 24 * 60 * 60; // Default 24 hours in seconds
+  private readonly idleTimeout = process.env.IDLE_TIMEOUT ? parseInt(process.env.IDLE_TIMEOUT, 10) : 30 * 60; // Default 30 minutes in seconds
 
   constructor(
     private readonly configService: ConfigService
@@ -177,7 +178,11 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   async setUserSession(userId: string, socketId: string, data: any): Promise<void> {
     try {
       const key = `user:${userId}:session:${socketId}`;
-      await this.redisClient.set(key, JSON.stringify(data), 'EX', this.sessionExpiry);
+      const sessionData = {
+        ...data,
+        lastActivity: new Date().toISOString()
+      };
+      await this.redisClient.set(key, JSON.stringify(sessionData), 'EX', this.sessionExpiry);
     } catch (error) {
       if (error instanceof Error) {
         this.logger.error(`Failed to set user session for ${userId}:`, error.message);
@@ -468,6 +473,53 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
         this.logger.error('Failed to get detailed online users: Unknown error');
       }
       return [];
+    }
+  }
+
+  async updateSessionActivity(userId: string, socketId: string): Promise<void> {
+    try {
+      const key = `user:${userId}:session:${socketId}`;
+      const sessionData = await this.getUserSession(userId, socketId);
+      if (sessionData) {
+        sessionData.lastActivity = new Date().toISOString();
+        await this.redisClient.set(key, JSON.stringify(sessionData), 'EX', this.sessionExpiry);
+      }
+    } catch (error) {
+      if (error instanceof Error) {
+        this.logger.error(`Failed to update session activity for ${userId}:`, error.message);
+      } else {
+        this.logger.error(`Failed to update session activity for ${userId}: Unknown error`);
+      }
+    }
+  }
+
+  async cleanupIdleSessions(): Promise<void> {
+    try {
+      const pattern = 'user:*:session:*';
+      const keys = await this.redisClient.keys(pattern);
+      const now = new Date();
+      
+      for (const key of keys) {
+        const sessionData = await this.redisClient.get(key);
+        if (sessionData) {
+          const session = JSON.parse(sessionData);
+          const lastActivity = new Date(session.lastActivity);
+          const idleTime = (now.getTime() - lastActivity.getTime()) / 1000; // Convert to seconds
+          
+          if (idleTime > this.idleTimeout) {
+            // Extract userId and socketId from key pattern: user:userId:session:socketId
+            const [, userId, , socketId] = key.split(':');
+            this.logger.debug(`Cleaning up idle session for user ${userId}, socket ${socketId}, idle for ${Math.round(idleTime / 60)} minutes`);
+            await this.removeUserSession(userId, socketId);
+          }
+        }
+      }
+    } catch (error) {
+      if (error instanceof Error) {
+        this.logger.error('Failed to cleanup idle sessions:', error.message);
+      } else {
+        this.logger.error('Failed to cleanup idle sessions: Unknown error');
+      }
     }
   }
 } 
