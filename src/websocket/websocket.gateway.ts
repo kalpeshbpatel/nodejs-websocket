@@ -360,7 +360,7 @@ export class AppWebSocketGateway implements OnGatewayInit, OnGatewayConnection, 
   async handleMessage(
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { 
-      recipientId: string;
+      recipientIds: string[];
       message: string;
       metadata?: any;
     }
@@ -371,9 +371,6 @@ export class AppWebSocketGateway implements OnGatewayInit, OnGatewayConnection, 
       if (user) {
         await this.redisService.updateSessionActivity(user.userId, client.id);
       }
-
-      // Debug user status before processing message
-      await this.debugUserStatus(data.recipientId);
 
       // Check if this is an internal service message
       const isInternalService = data.metadata?.source === 'internal_service';
@@ -386,39 +383,59 @@ export class AppWebSocketGateway implements OnGatewayInit, OnGatewayConnection, 
         }
       }
 
-      if (!data.recipientId || !data.message) {
-        throw new Error('Missing required fields: recipientId and message');
+      if (!data.recipientIds || !Array.isArray(data.recipientIds) || data.recipientIds.length === 0 || !data.message) {
+        throw new Error('Missing required fields: recipientIds (array) and message');
       }
 
-      // Get recipient's active sessions
-      const sessionKeys = await this.redisService.getUserSessions(data.recipientId);
-      this.logger.debug(`Found ${sessionKeys.length} active sessions for user ${data.recipientId}: ${JSON.stringify(sessionKeys)}`);
-      
-      if (sessionKeys.length === 0) {
-        this.logger.warn(`No active sessions found for recipient: ${data.recipientId}`);
+      // Get all recipients' active sessions
+      const allSessions: { recipientId: string; socketId: string }[] = [];
+      for (const recipientId of data.recipientIds) {
+        // Debug user status before processing message
+        await this.debugUserStatus(recipientId);
+
+        // Get recipient's active sessions
+        const sessionKeys = await this.redisService.getUserSessions(recipientId);
+        this.logger.debug(`Found ${sessionKeys.length} active sessions for user ${recipientId}: ${JSON.stringify(sessionKeys)}`);
+        
+        if (sessionKeys.length === 0) {
+          this.logger.warn(`No active sessions found for recipient: ${recipientId}`);
+          continue;
+        }
+
+        // Add sessions to the list
+        sessionKeys.forEach(sessionKey => {
+          const socketId = sessionKey.split(':').pop();
+          if (socketId) {
+            allSessions.push({ recipientId, socketId });
+          }
+        });
+      }
+
+      if (allSessions.length === 0) {
         return {
           status: 'error',
-          error: 'Recipient not online',
+          error: 'No recipients online',
           timestamp: new Date().toISOString()
         };
       }
 
-      // Send message to all recipient's sessions
-      for (const sessionKey of sessionKeys) {
-        const socketId = sessionKey.split(':').pop();
-        if (socketId) {
-          this.logger.debug(`Sending message to socket: ${socketId}`);
-          this.server.to(socketId).emit('message', {
-            ...data,
-            timestamp: new Date().toISOString()
-          });
-        }
+      // Send message to all recipient sessions
+      for (const { recipientId, socketId } of allSessions) {
+        this.logger.debug(`Sending message to socket: ${socketId}`);
+        this.server.to(socketId).emit('message', {
+          recipientId,
+          message: data.message,
+          metadata: data.metadata,
+          timestamp: new Date().toISOString()
+        });
       }
 
-      this.logger.debug(`Message sent to recipient ${data.recipientId} from ${isInternalService ? 'internal service' : client.id}`);
+      this.logger.debug(`Message sent to ${allSessions.length} sessions from ${isInternalService ? 'internal service' : client.id}`);
 
       return {
         status: 'sent',
+        recipients: data.recipientIds,
+        sessions: allSessions.length,
         timestamp: new Date().toISOString()
       };
 

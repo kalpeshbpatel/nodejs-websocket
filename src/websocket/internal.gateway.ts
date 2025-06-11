@@ -90,33 +90,60 @@ import {
     async handleSendMessage(
       @ConnectedSocket() client: Socket,
       @MessageBody() data: { 
-        recipientId: string;
+        recipientIds: string[];
         message: string;
         metadata?: any;
       }
     ) {
       try {
-        if (!data.recipientId || !data.message) {
-          throw new Error('Missing required fields: recipientId and message');
+        // Validate required fields
+        if (!data.recipientIds || !Array.isArray(data.recipientIds) || data.recipientIds.length === 0 || !data.message) {
+          throw new Error('Missing required fields: recipientIds (array) and message');
         }
-  
-        // Use Redis adapter to broadcast message
-        this.server.emit('send_message', {
-          recipientId: data.recipientId,
-          message: data.message,
-          metadata: {
-            ...data.metadata,
-            source: 'internal_service',
-            internalClientId: client.id
+
+        // Validate each recipient ID
+        const invalidIds = data.recipientIds.filter(id => !id || typeof id !== 'string' || id.trim().length === 0);
+        if (invalidIds.length > 0) {
+          throw new Error(`Invalid recipient IDs found: ${invalidIds.join(', ')}`);
+        }
+
+        // Clean and deduplicate recipient IDs
+        const uniqueRecipientIds = [...new Set(data.recipientIds.map(id => id.trim()))];
+        
+        // Use Redis adapter to broadcast message to specific recipients
+        const sentTo: string[] = [];
+        const failedTo: string[] = [];
+
+        for (const recipientId of uniqueRecipientIds) {
+          try {
+            this.server.to(recipientId).emit('send_message', {
+              recipientId,
+              message: data.message,
+              metadata: {
+                ...data.metadata,
+                source: 'internal_service',
+                internalClientId: client.id,
+                timestamp: new Date().toISOString()
+              }
+            });
+            sentTo.push(recipientId);
+          } catch (err) {
+            this.logger.warn(`Failed to send message to recipient ${recipientId}:`, err);
+            failedTo.push(recipientId);
           }
-        });
-  
-        // Acknowledge to internal client
+        }
+
+        // Acknowledge to internal client with detailed status
         return {
-          status: 'sent',
+          status: sentTo.length > 0 ? 'sent' : 'error',
+          recipients: {
+            total: uniqueRecipientIds.length,
+            sent: sentTo,
+            failed: failedTo
+          },
           timestamp: new Date().toISOString()
         };
-  
+
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         this.logger.error(`Error sending message from internal service ${client.id}:`, errorMessage);

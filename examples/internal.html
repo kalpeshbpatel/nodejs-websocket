@@ -293,8 +293,9 @@
             <div class="panel">
                 <h3><span class="emoji">⚡</span> Actions</h3>
                 <div class="form-group">
-                    <label for="recipientId">Recipient ID:</label>
-                    <input type="text" id="recipientId" placeholder="Enter recipient user ID">
+                    <label for="recipientId">Recipient IDs (comma-separated):</label>
+                    <input type="text" id="recipientId" placeholder="Enter recipient IDs (e.g., id1, id2, id3)">
+                    <small style="display: block; margin-top: 5px; color: #666;">Separate multiple IDs with commas</small>
                 </div>
                 <div class="form-group">
                     <label for="message">Message:</label>
@@ -478,7 +479,7 @@
 
         elements.sendBtn.addEventListener('click', () => {
             if (socket && isConnected) {
-                const recipientId = elements.recipientId.value.trim();
+                const recipientIdsText = elements.recipientId.value.trim();
                 const message = elements.message.value.trim();
                 let metadata = {};
 
@@ -492,16 +493,33 @@
                     return;
                 }
 
-                if (!recipientId || !message) {
-                    alert('Please enter both recipient ID and message');
+                if (!recipientIdsText || !message) {
+                    alert('Please enter both recipient IDs and message');
+                    return;
+                }
+
+                // Split and clean recipient IDs
+                const recipientIds = recipientIdsText.split(',')
+                    .map(id => id.trim())
+                    .filter(id => id.length > 0);
+
+                if (recipientIds.length === 0) {
+                    alert('Please enter at least one valid recipient ID');
+                    return;
+                }
+
+                // Validate recipient IDs
+                const invalidIds = recipientIds.filter(id => !/^[a-zA-Z0-9_-]+$/.test(id));
+                if (invalidIds.length > 0) {
+                    alert(`Invalid recipient IDs found: ${invalidIds.join(', ')}\nIDs should only contain letters, numbers, underscores, and hyphens.`);
                     return;
                 }
 
                 const startTime = Date.now();
-                logMessage(`Sending message to ${recipientId}...`, 'info');
+                logMessage(`Sending message to ${recipientIds.length} recipient(s)...`, 'info');
 
                 socket.emit('send_message', {
-                    recipientId,
+                    recipientIds,
                     message,
                     metadata: {
                         ...metadata,
@@ -515,9 +533,22 @@
 
                     if (response && response.status === 'sent') {
                         messageStats.success++;
+                        const { total, sent, failed } = response.recipients;
                         logMessage(`✅ Message sent successfully (${latency}ms)`, 'success');
+                        logMessage(`📊 Delivery Status:`, 'info');
+                        logMessage(`   • Total recipients: ${total}`, 'info');
+                        logMessage(`   • Successfully sent: ${sent.length}`, 'info');
+                        if (sent.length > 0) {
+                            logMessage(`   • Sent to: ${sent.join(', ')}`, 'info');
+                        }
+                        if (failed.length > 0) {
+                            logMessage(`   • Failed to send: ${failed.join(', ')}`, 'error');
+                        }
                     } else {
                         logMessage(`❌ Failed to send message: ${response?.error || 'Unknown error'}`, 'error');
+                        if (response?.recipients?.failed?.length > 0) {
+                            logMessage(`   • Failed recipients: ${response.recipients.failed.join(', ')}`, 'error');
+                        }
                     }
 
                     updateMetrics();
