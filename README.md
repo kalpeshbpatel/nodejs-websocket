@@ -1,193 +1,234 @@
-# WebSocket Friends & Online Users Server
+# Scarfall WebSocket Service
 
-A privacy-focused NestJS WebSocket server that implements friend-based status updates and multiple online user query types with different privacy levels.
+A robust, scalable WebSocket service built with NestJS and Socket.IO, designed for real-time communication in the Scarfall platform. The service provides both user-facing and internal service communication capabilities with Redis-based session management and authentication.
 
-## 🎯 Key Features
+## Features
 
-### Privacy-Focused Design
+### User WebSocket Gateway
 
-- **Friend-only status updates**: Users only receive status updates from their friends, not all users
-- **Multiple privacy levels**: Different online user queries for different use cases
-- **Session tracking**: Track multiple sessions per user
+- **Authentication**: JWT-based authentication for secure connections
+- **Real-time Messaging**: Send messages to multiple recipients simultaneously
+- **User Status Management**: Track online/offline status with last seen timestamps
+- **Friend Status Updates**: Real-time notifications for friend status changes
+- **Session Management**: Multiple device support with session tracking
+- **Online Users Tracking**:
+  - Get online friends
+  - Get all online users
+  - Get detailed online user information
+- **Privacy-Focused**: Status updates only sent to friends, not all users
 
-### Online User Query Types
+### Internal Service Gateway
 
-1. **Friends Only** (`get_online_users`) - High privacy, returns only friends who are online
-2. **All Users Basic** (`get_all_online_users`) - Medium privacy, basic info for all online users
-3. **Detailed Users** (`get_detailed_online_users`) - Low privacy, full details including emails and session counts
-4. **Explicit Friends** (`get_online_friends_only`) - Alternative friends-only endpoint
+- **Service-to-Service Communication**: Dedicated gateway for internal services
+- **Multi-Recipient Messaging**: Send messages to multiple users from internal services
+- **Message Delivery Tracking**: Detailed delivery status for each message
+- **Service Authentication**: Simple service-based authentication
+- **Redis Adapter**: Scalable message distribution across multiple instances
 
-### Real-time Features
+## Architecture
 
-- JWT-based authentication
-- Live friend status updates (online/offline)
-- Session management with Redis
-- Connection monitoring
+### Components
 
-## 🚀 Quick Start
+1. **AppWebSocketGateway**: Handles user connections and messaging
 
-### 1. Start the Server
+   - Port: 3000 (default)
+   - Authentication required
+   - Friend-based status updates
+   - Session management
+
+2. **InternalWebSocketGateway**: Handles internal service communication
+
+   - Port: 4000 (default)
+   - No authentication required
+   - Direct message delivery
+   - Service-to-user communication
+
+3. **Redis Integration**
+   - Session storage
+   - User status tracking
+   - Message distribution
+   - Friend relationship management
+
+### Message Format
+
+#### User Messages
+
+```json
+{
+  "recipientIds": ["user1", "user2"],
+  "message": "Hello!",
+  "metadata": {
+    "type": "chat",
+    "timestamp": "2024-03-11T14:30:00.000Z"
+  }
+}
+```
+
+#### Internal Service Messages
+
+```json
+{
+  "recipientIds": ["user1", "user2"],
+  "message": "System notification",
+  "metadata": {
+    "source": "internal_service",
+    "type": "notification",
+    "serviceName": "notification_service"
+  }
+}
+```
+
+## Setup
+
+### Prerequisites
+
+- Node.js (v14 or higher)
+- Redis (v6 or higher)
+- Docker (optional)
+
+### Environment Variables
+
+```env
+# Server Configuration
+PORT=3000
+INTERNAL_PORT=4000
+CORS_ORIGIN=*
+
+# Redis Configuration
+REDIS_HOST=127.0.0.1
+REDIS_PORT=6379
+REDIS_PASSWORD=scarfall@redis
+
+# JWT Configuration
+JWT_SECRET=your_jwt_secret
+JWT_EXPIRATION=24h
+```
+
+### Installation
 
 ```bash
 # Install dependencies
 npm install
 
-# Start Redis (required)
-docker-compose up redis -d
-
-# Start the WebSocket server
+# Development
 npm run start:dev
+
+# Production
+npm run build
+npm run start:prod
+
+# Docker
+docker-compose up -d
 ```
 
-Server runs on `ws://localhost:3001`
+## API Reference
 
-### 2. Test with HTML Client
+### User Gateway Events
 
-```bash
-# Start the beautiful HTML client
-npm run serve
-```
+#### Authentication
 
-This opens `http://localhost:8081` with a modern WebSocket testing interface.
+- **Event**: `authenticate`
+- **Payload**: `{ token: string }`
+- **Response**: User connection details
 
-### 3. Get a JWT Token
+#### Messaging
 
-1. Go to your Node.js API at `http://localhost:8080/api-docs`
-2. Login to get a JWT token
-3. Use the token in the HTML client
-
-## 🎨 HTML Client Features
-
-The included HTML client (`examples/client.html`) provides:
-
-- **🔐 Authentication**: Secure JWT login
-- **👥 Friend Testing**: Test all friend-related functionality
-- **📊 Privacy Levels**: Compare different online user queries
-- **📱 Real-time Updates**: Live friend status notifications
-- **🎯 Testing Tools**: Ping, metrics dashboard, activity logs
-- **🎨 Modern UI**: Beautiful responsive design with gradients and emojis
-
-![WebSocket Client Screenshot](placeholder-for-screenshot)
-
-## 📊 Privacy Levels Comparison
-
-| Query Type                  | Privacy Level | Response Includes             | Use Case                      |
-| --------------------------- | ------------- | ----------------------------- | ----------------------------- |
-| `get_online_users`          | **High**      | Friends only + full details   | Social features, friend lists |
-| `get_all_online_users`      | **Medium**    | All users + basic info only   | Analytics, user counts        |
-| `get_detailed_online_users` | **Low**       | All users + emails + sessions | Admin panels, monitoring      |
-| `get_online_friends_only`   | **High**      | Friends only (explicit)       | Alternative friends endpoint  |
-
-## 🗃️ Data Structure
-
-### Redis Friend Storage
-
-```json
-friends:683d6aaedb525b175ea8ee40 = [
+- **Event**: `send_message`
+- **Payload**:
+  ```json
   {
-    "_id": "683d6adfdb525b175ea8ee46",
-    "email": "jigisha.kb.patel@gmail.com",
-    "userId": "jigisha.patel"
+    "recipientIds": string[],
+    "message": string,
+    "metadata": object
   }
-]
-```
+  ```
+- **Response**: Message delivery status
 
-### WebSocket Events
+#### User Status
 
-#### Client → Server
+- **Event**: `get_online_users`
+- **Response**: List of online friends
 
-- `authenticate` - Login with JWT token
-- `ping` - Test connectivity
-- `get_online_users` - Get online friends (default)
-- `get_all_online_users` - Get all online users (basic)
-- `get_detailed_online_users` - Get detailed user info
-- `get_online_friends_only` - Get online friends (explicit)
+- **Event**: `get_all_online_users`
+- **Response**: List of all online users
 
-#### Server → Client
+- **Event**: `get_detailed_online_users`
+- **Response**: Detailed online user information
 
-- `connected` - Authentication successful
-- `user_status_update` - Friend status changed
-- Response callbacks for all queries
+### Internal Gateway Events
 
-## 🔧 Setup Friend Data
+#### Connection
 
-Use Redis CLI or the HTML client instructions:
+- **Event**: `connect`
+- **Response**: Connection confirmation with socket ID
+
+#### Messaging
+
+- **Event**: `send_message`
+- **Payload**:
+  ```json
+  {
+    "recipientIds": string[],
+    "message": string,
+    "metadata": object
+  }
+  ```
+- **Response**:
+  ```json
+  {
+    "status": "sent" | "error",
+    "recipients": {
+      "total": number,
+      "sent": string[],
+      "failed": string[]
+    },
+    "timestamp": string
+  }
+  ```
+
+## Testing
+
+The project includes example clients for testing:
+
+- `examples/internal.html`: Internal service testing client
+- `examples/user.html`: User client for testing
+
+### Running Tests
 
 ```bash
-# User A friends User B
-SET friends:683d6aaedb525b175ea8ee40 '[{"_id":"683d6adfdb525b175ea8ee46","email":"jigisha.kb.patel@gmail.com","userId":"jigisha.patel"}]'
+# Unit tests
+npm run test
 
-# User B friends User A
-SET friends:683d6adfdb525b175ea8ee46 '[{"_id":"683d6aaedb525b175ea8ee40","email":"user.a@example.com","userId":"user.a"}]'
+# E2E tests
+npm run test:e2e
+
+# Test coverage
+npm run test:cov
 ```
 
-## 🏗️ Architecture
+## Monitoring
 
-```
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   HTML Client   │◄──►│  WebSocket Server │◄──►│   Redis Store   │
-│                 │    │                  │    │                 │
-│ • Authentication│    │ • Friend Privacy │    │ • Friend Data   │
-│ • Real-time UI  │    │ • Session Mgmt   │    │ • User Status   │
-│ • Testing Tools │    │ • Status Updates │    │ • Session Info  │
-└─────────────────┘    └──────────────────┘    └─────────────────┘
-```
+- Logs are stored in the `logs/` directory
+- Redis session cleanup runs every 5 minutes
+- Debug logging available for development
 
-## 📁 Project Structure
+## Security
 
-```
-src/
-├── websocket/
-│   ├── websocket.gateway.ts    # Main WebSocket handlers
-│   └── websocket.module.ts     # WebSocket module
-├── redis/
-│   ├── redis.service.ts        # Redis operations
-│   └── redis.module.ts         # Redis module
-└── main.ts                     # Server entry point
+- JWT-based authentication for user connections
+- CORS protection
+- Helmet security headers
+- Rate limiting (configurable)
+- Session management with Redis
+- Secure WebSocket connections
 
-examples/
-├── client.html                 # Modern HTML client
-└── README.md                   # Client documentation
-```
+## Contributing
 
-## 🧪 Testing Scenarios
+1. Fork the repository
+2. Create your feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a Pull Request
 
-### 1. Privacy Testing
+## License
 
-1. Open multiple browser tabs with different user tokens
-2. Use "Test All" to compare privacy levels
-3. Verify friends-only behavior vs all-users queries
-
-### 2. Real-time Updates
-
-1. Connect two users who are friends
-2. Close one browser tab
-3. Watch the other receive offline status update
-
-### 3. Session Management
-
-1. Open multiple tabs with same user token
-2. Use "Detailed Info" to see session counts
-3. Close tabs and verify session cleanup
-
-## 🔒 Security Features
-
-- **JWT Authentication**: All connections require valid JWT tokens
-- **Friend-based Privacy**: Status updates only sent to friends
-- **Session Isolation**: Each browser tab = separate session
-- **Error Handling**: Graceful handling of invalid tokens/connections
-
-## 🚦 Status
-
-- ✅ **Production Ready**: Comprehensive error handling and logging
-- ✅ **Privacy Compliant**: Friend-based status updates only
-- ✅ **Scalable**: Redis-based session and friend management
-- ✅ **Well Tested**: HTML client with comprehensive testing tools
-
-## 📖 Documentation
-
-- [HTML Client Guide](examples/README.md) - Complete client documentation
-- [Online Users Guide](ONLINE_USERS_GUIDE.md) - Privacy levels explained
-- API docs available at runtime
-
-Perfect for social applications requiring privacy-focused real-time communication! 🎉
+This project is proprietary and confidential. Unauthorized copying, distribution, or use is strictly prohibited.
