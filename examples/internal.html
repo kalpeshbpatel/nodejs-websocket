@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Internal WebSocket Client - Microservice Testing</title>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+        
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            padding: 30px;
+        }
+        
+        .panel {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 25px;
+            border: 1px solid #e9ecef;
+        }
+        
+        .panel h3 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+            font-size: 1.3em;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        
+        .form-group input, .form-group textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        
+        .form-group textarea {
+            height: 100px;
+            resize: vertical;
+        }
+        
+        .form-group input:focus, .form-group textarea:focus {
+            outline: none;
+            border-color: #3498db;
+        }
+        
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin: 5px;
+        }
+        
+        .btn-primary {
+            background: #3498db;
+            color: white;
+        }
+        
+        .btn-primary:hover:not(:disabled) {
+            background: #2980b9;
+            transform: translateY(-2px);
+        }
+        
+        .btn-secondary {
+            background: #95a5a6;
+            color: white;
+        }
+        
+        .btn-secondary:hover:not(:disabled) {
+            background: #7f8c8d;
+        }
+        
+        .btn-success {
+            background: #27ae60;
+            color: white;
+        }
+        
+        .btn-success:hover:not(:disabled) {
+            background: #219a52;
+        }
+        
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .status {
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            font-weight: 600;
+            text-align: center;
+        }
+        
+        .status.connected {
+            background: #d4edda;
+            color: #155724;
+            border: 2px solid #c3e6cb;
+        }
+        
+        .status.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+            border: 2px solid #f5c6cb;
+        }
+        
+        .button-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            margin: 20px 0;
+        }
+        
+        .log-container {
+            grid-column: 1 / -1;
+            margin-top: 20px;
+        }
+        
+        .log {
+            background: #1a1a1a;
+            color: #00ff41;
+            padding: 20px;
+            height: 400px;
+            overflow-y: auto;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 13px;
+            border-radius: 8px;
+            white-space: pre-wrap;
+            line-height: 1.4;
+        }
+        
+        .log::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        .log::-webkit-scrollbar-track {
+            background: #2a2a2a;
+        }
+        
+        .log::-webkit-scrollbar-thumb {
+            background: #00ff41;
+            border-radius: 4px;
+        }
+        
+        .emoji {
+            font-style: normal;
+        }
+        
+        .highlight {
+            background: rgba(52, 152, 219, 0.1);
+            padding: 2px 4px;
+            border-radius: 4px;
+        }
+        
+        .service-info {
+            background: rgba(52, 152, 219, 0.1);
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            font-size: 14px;
+        }
+        
+        .metrics {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        
+        .metric {
+            text-align: center;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            border: 2px solid #e9ecef;
+        }
+        
+        .metric-value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #3498db;
+        }
+        
+        .metric-label {
+            font-size: 0.9em;
+            color: #7f8c8d;
+            margin-top: 5px;
+        }
+
+        @media (max-width: 768px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+            
+            .button-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1><span class="emoji">🔧</span> Internal WebSocket Client</h1>
+            <p>Microservice Testing Platform</p>
+        </div>
+        
+        <div class="main-content">
+            <!-- Connection Panel -->
+            <div class="panel">
+                <h3><span class="emoji">🔌</span> Connection</h3>
+                <div class="form-group">
+                    <label for="serverUrl">Internal Service URL:</label>
+                    <input type="text" id="serverUrl" value="ws://localhost:4001">
+                </div>
+                <div class="form-group">
+                    <label for="serviceName">Service Name:</label>
+                    <input type="text" id="serviceName" placeholder="Enter your microservice name">
+                </div>
+                <div class="button-grid">
+                    <button class="btn btn-primary" id="connectBtn">
+                        <span class="emoji">🔌</span> Connect
+                    </button>
+                    <button class="btn btn-secondary" id="disconnectBtn" disabled>
+                        <span class="emoji">🔌</span> Disconnect
+                    </button>
+                </div>
+                <div id="status" class="status disconnected">
+                    <span class="emoji">❌</span> Disconnected
+                </div>
+                <div id="serviceInfo" class="service-info" style="display: none;"></div>
+            </div>
+
+            <!-- Actions Panel -->
+            <div class="panel">
+                <h3><span class="emoji">⚡</span> Actions</h3>
+                <div class="form-group">
+                    <label for="recipientId">Recipient ID:</label>
+                    <input type="text" id="recipientId" placeholder="Enter recipient user ID">
+                </div>
+                <div class="form-group">
+                    <label for="message">Message:</label>
+                    <textarea id="message" placeholder="Enter your message"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="metadata">Metadata (JSON):</label>
+                    <textarea id="metadata" placeholder='{"key": "value"}'></textarea>
+                </div>
+                <div class="button-grid">
+                    <button class="btn btn-success" id="sendBtn" disabled>
+                        <span class="emoji">📤</span> Send Message
+                    </button>
+                    <button class="btn btn-primary" id="pingBtn" disabled>
+                        <span class="emoji">🏓</span> Ping
+                    </button>
+                </div>
+                
+                <div class="metrics" id="metrics" style="display: none;">
+                    <div class="metric">
+                        <div class="metric-value" id="messagesSent">0</div>
+                        <div class="metric-label">Messages Sent</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value" id="successRate">0%</div>
+                        <div class="metric-label">Success Rate</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value" id="avgLatency">0ms</div>
+                        <div class="metric-label">Avg. Latency</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Log Panel -->
+            <div class="log-container">
+                <div class="panel">
+                    <h3>
+                        <span class="emoji">📋</span> Activity Log
+                        <button class="btn btn-secondary" onclick="clearLog()" style="float: right; margin-top: -5px;">
+                            <span class="emoji">🗑️</span> Clear
+                        </button>
+                    </h3>
+                    <div id="log" class="log"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let socket = null;
+        let isConnected = false;
+        let currentService = null;
+        let messageStats = {
+            sent: 0,
+            success: 0,
+            totalLatency: 0
+        };
+
+        const elements = {
+            serverUrl: document.getElementById('serverUrl'),
+            serviceName: document.getElementById('serviceName'),
+            connectBtn: document.getElementById('connectBtn'),
+            disconnectBtn: document.getElementById('disconnectBtn'),
+            status: document.getElementById('status'),
+            serviceInfo: document.getElementById('serviceInfo'),
+            recipientId: document.getElementById('recipientId'),
+            message: document.getElementById('message'),
+            metadata: document.getElementById('metadata'),
+            sendBtn: document.getElementById('sendBtn'),
+            pingBtn: document.getElementById('pingBtn'),
+            log: document.getElementById('log'),
+            metrics: document.getElementById('metrics'),
+            messagesSent: document.getElementById('messagesSent'),
+            successRate: document.getElementById('successRate'),
+            avgLatency: document.getElementById('avgLatency')
+        };
+
+        function logMessage(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const emoji = type === 'error' ? '❌' : type === 'success' ? '✅' : type === 'info' ? 'ℹ️' : '📝';
+            elements.log.textContent += `[${timestamp}] ${emoji} ${message}\n`;
+            elements.log.scrollTop = elements.log.scrollHeight;
+        }
+
+        function clearLog() {
+            elements.log.textContent = '';
+            logMessage('Log cleared', 'info');
+        }
+
+        function updateConnectionStatus(connected, service = null) {
+            isConnected = connected;
+            currentService = service;
+            
+            if (connected) {
+                elements.status.innerHTML = '<span class="emoji">✅</span> Connected';
+                elements.status.className = 'status connected';
+                elements.connectBtn.disabled = true;
+                elements.disconnectBtn.disabled = false;
+                elements.sendBtn.disabled = false;
+                elements.pingBtn.disabled = false;
+                
+                if (service) {
+                    elements.serviceInfo.style.display = 'block';
+                    elements.serviceInfo.innerHTML = `
+                        <strong>🔧 ${service.name}</strong><br>
+                        <span class="highlight">Socket ID:</span> ${service.socketId}<br>
+                        <span class="highlight">Connected At:</span> ${new Date(service.connectedAt).toLocaleString()}
+                    `;
+                }
+                elements.metrics.style.display = 'grid';
+            } else {
+                elements.status.innerHTML = '<span class="emoji">❌</span> Disconnected';
+                elements.status.className = 'status disconnected';
+                elements.connectBtn.disabled = false;
+                elements.disconnectBtn.disabled = true;
+                elements.sendBtn.disabled = true;
+                elements.pingBtn.disabled = true;
+                elements.serviceInfo.style.display = 'none';
+                elements.metrics.style.display = 'none';
+            }
+        }
+
+        function updateMetrics() {
+            elements.messagesSent.textContent = messageStats.sent;
+            const successRate = messageStats.sent > 0 ? (messageStats.success / messageStats.sent * 100).toFixed(1) : 0;
+            elements.successRate.textContent = `${successRate}%`;
+            const avgLatency = messageStats.sent > 0 ? Math.round(messageStats.totalLatency / messageStats.sent) : 0;
+            elements.avgLatency.textContent = `${avgLatency}ms`;
+        }
+
+        elements.connectBtn.addEventListener('click', () => {
+            const url = elements.serverUrl.value.trim();
+            const serviceName = elements.serviceName.value.trim();
+
+            if (!serviceName) {
+                alert('Please enter a service name');
+                return;
+            }
+
+            logMessage(`Connecting to ${url}...`, 'info');
+
+            socket = io(url, {
+                transports: ['websocket'],
+                reconnection: true,
+                reconnectionAttempts: 5,
+                reconnectionDelay: 1000
+            });
+
+            socket.on('connect', () => {
+                logMessage(`Socket connected! ID: ${socket.id}`, 'success');
+                updateConnectionStatus(true, {
+                    name: serviceName,
+                    socketId: socket.id,
+                    connectedAt: new Date()
+                });
+            });
+
+            socket.on('disconnect', (reason) => {
+                logMessage(`Disconnected: ${reason}`, 'error');
+                updateConnectionStatus(false);
+            });
+
+            socket.on('connect_error', (error) => {
+                logMessage(`Connection error: ${error.message}`, 'error');
+                updateConnectionStatus(false);
+            });
+
+            socket.on('error', (error) => {
+                logMessage(`Socket error: ${JSON.stringify(error)}`, 'error');
+            });
+        });
+
+        elements.disconnectBtn.addEventListener('click', () => {
+            if (socket) {
+                socket.disconnect();
+                socket = null;
+                logMessage('Manually disconnected', 'info');
+            }
+        });
+
+        elements.sendBtn.addEventListener('click', () => {
+            if (socket && isConnected) {
+                const recipientId = elements.recipientId.value.trim();
+                const message = elements.message.value.trim();
+                let metadata = {};
+
+                try {
+                    const metadataText = elements.metadata.value.trim();
+                    if (metadataText) {
+                        metadata = JSON.parse(metadataText);
+                    }
+                } catch (error) {
+                    logMessage(`Invalid metadata JSON: ${error.message}`, 'error');
+                    return;
+                }
+
+                if (!recipientId || !message) {
+                    alert('Please enter both recipient ID and message');
+                    return;
+                }
+
+                const startTime = Date.now();
+                logMessage(`Sending message to ${recipientId}...`, 'info');
+
+                socket.emit('send_message', {
+                    recipientId,
+                    message,
+                    metadata: {
+                        ...metadata,
+                        serviceName: currentService.name,
+                        timestamp: new Date().toISOString()
+                    }
+                }, (response) => {
+                    const latency = Date.now() - startTime;
+                    messageStats.sent++;
+                    messageStats.totalLatency += latency;
+
+                    if (response && response.status === 'sent') {
+                        messageStats.success++;
+                        logMessage(`✅ Message sent successfully (${latency}ms)`, 'success');
+                    } else {
+                        logMessage(`❌ Failed to send message: ${response?.error || 'Unknown error'}`, 'error');
+                    }
+
+                    updateMetrics();
+                });
+            }
+        });
+
+        elements.pingBtn.addEventListener('click', () => {
+            if (socket && isConnected) {
+                const startTime = Date.now();
+                logMessage('Sending ping...', 'info');
+                
+                socket.emit('ping', (response) => {
+                    const latency = Date.now() - startTime;
+                    if (response && response.timestamp) {
+                        logMessage(`🏓 Pong received (${latency}ms) - Service: ${response.service}`, 'success');
+                    } else {
+                        logMessage(`🏓 Pong: ${JSON.stringify(response)}`, 'success');
+                    }
+                });
+            }
+        });
+
+        // Initialize
+        updateConnectionStatus(false);
+        logMessage('🔧 Internal WebSocket client ready!', 'success');
+        logMessage('Enter your service name and click Connect to begin.', 'info');
+    </script>
+</body>
+</html> 

@@ -8,6 +8,7 @@ import * as cookieParser from 'cookie-parser';
 import * as fs from 'fs';
 import * as path from 'path';
 import { ConfigService } from '@nestjs/config';
+import { InternalWebSocketGateway } from './websocket/internal.gateway';
 
 async function bootstrap() {
   // Create logs directory if it doesn't exist
@@ -26,7 +27,8 @@ async function bootstrap() {
   app.useLogger(logger);
 
   const configService = app.get(ConfigService);
-  const port = configService.get('port') || 3001;
+  const port = configService.get('port') || 3000;
+  const internalPort = configService.get('internalPort') || 4000;
 
   // Security middleware
   app.use(helmet.default());
@@ -50,11 +52,26 @@ async function bootstrap() {
     credentials: true,
   });
 
-  // Start the server
+  // Start the main server
   await app.listen(port);
   
   logger.log(`WebSocket server is running on port ${port}`, 'NestApplication');
   logger.log(`WebSocket endpoint available at: ws://localhost:${port}`, 'NestApplication');
+
+  // Create and start internal WebSocket server
+  const internalApp = await NestFactory.create(AppModule, {
+    bufferLogs: true,
+  });
+  internalApp.useLogger(logger);
+
+  // Get the InternalWebSocketGateway instance
+  const internalGateway = internalApp.get(InternalWebSocketGateway);
+
+  // Start internal server
+  await internalApp.listen(internalPort);
+  
+  logger.log(`Internal WebSocket server is running on port ${internalPort}`, 'NestApplication');
+  logger.log(`Internal WebSocket endpoint available at: ws://localhost:${internalPort}`, 'NestApplication');
   logger.debug('Debug logging is enabled', 'NestApplication');
 }
 

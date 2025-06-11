@@ -3,8 +3,9 @@ import { ConfigModule } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import configuration from './config/configuration';
 import { LoggerModule } from './logger/logger.module';
-import { RedisService } from './redis/redis.service';
+import { RedisModule } from './redis/redis.module';
 import { AppWebSocketGateway } from './websocket/websocket.gateway';
+import { InternalWebSocketGateway } from './websocket/internal.gateway';
 import { JwtWsGuard } from './auth/jwt-ws.guard';
 import { CustomLogger } from './logger/logger.service';
 import { AppController } from './app.controller';
@@ -25,12 +26,13 @@ import { AppService } from './app.service';
       }),
     }),
     LoggerModule,
+    RedisModule,
   ],
   controllers: [AppController],
   providers: [
     AppService,
     AppWebSocketGateway,
-    RedisService,
+    InternalWebSocketGateway,
     CustomLogger,
     JwtWsGuard,
   ],

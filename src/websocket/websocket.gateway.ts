@@ -318,4 +318,96 @@ export class AppWebSocketGateway implements OnGatewayInit, OnGatewayConnection, 
       return { users: [] };
     }
   }
+
+  // Add this method to check user status
+  private async debugUserStatus(userId: string): Promise<void> {
+    try {
+      // Check user status
+      const status = await this.redisService.getUserStatus(userId);
+      this.logger.debug(`User ${userId} status:`, status);
+
+      // Check user sessions
+      const sessions = await this.redisService.getUserSessions(userId);
+      this.logger.debug(`User ${userId} active sessions:`, sessions);
+
+      // Check session details
+      for (const sessionKey of sessions) {
+        const sessionData = await this.redisService.getUserSession(userId, sessionKey.split(':').pop() || '');
+        this.logger.debug(`Session ${sessionKey} data:`, sessionData);
+      }
+    } catch (error) {
+      this.logger.error(`Error debugging user ${userId} status:`, error);
+    }
+  }
+
+  @SubscribeMessage('send_message')
+  async handleMessage(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { 
+      recipientId: string;
+      message: string;
+      metadata?: any;
+    }
+  ) {
+    try {
+      // Debug user status before processing message
+      await this.debugUserStatus(data.recipientId);
+
+      // Check if this is an internal service message
+      const isInternalService = data.metadata?.source === 'internal_service';
+      
+      // For internal service messages, bypass authentication
+      if (!isInternalService) {
+        const user = client.data.user;
+        if (!user) {
+          throw new Error('User not authenticated');
+        }
+      }
+
+      if (!data.recipientId || !data.message) {
+        throw new Error('Missing required fields: recipientId and message');
+      }
+
+      // Get recipient's active sessions
+      const sessionKeys = await this.redisService.getUserSessions(data.recipientId);
+      this.logger.debug(`Found ${sessionKeys.length} active sessions for user ${data.recipientId}: ${JSON.stringify(sessionKeys)}`);
+      
+      if (sessionKeys.length === 0) {
+        this.logger.warn(`No active sessions found for recipient: ${data.recipientId}`);
+        return {
+          status: 'error',
+          error: 'Recipient not online',
+          timestamp: new Date().toISOString()
+        };
+      }
+
+      // Send message to all recipient's sessions
+      for (const sessionKey of sessionKeys) {
+        const socketId = sessionKey.split(':').pop();
+        if (socketId) {
+          this.logger.debug(`Sending message to socket: ${socketId}`);
+          this.server.to(socketId).emit('message', {
+            ...data,
+            timestamp: new Date().toISOString()
+          });
+        }
+      }
+
+      this.logger.debug(`Message sent to recipient ${data.recipientId} from ${isInternalService ? 'internal service' : client.id}`);
+
+      return {
+        status: 'sent',
+        timestamp: new Date().toISOString()
+      };
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Error handling message:`, errorMessage);
+      return {
+        status: 'error',
+        error: errorMessage,
+        timestamp: new Date().toISOString()
+      };
+    }
+  }
 } 

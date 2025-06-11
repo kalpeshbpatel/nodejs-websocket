@@ -483,6 +483,17 @@
                 logMessage(`Socket error: ${JSON.stringify(error)}`, 'error');
             });
 
+            socket.on('message', (data) => {
+                const timestamp = new Date(data.metadata?.timestamp || Date.now()).toLocaleTimeString();
+                const source = data.metadata?.serviceName || 'Unknown';
+                logMessage(`📨 Message from ${source} at ${timestamp}:`, 'info');
+                logMessage(`  To: ${data.recipientId}`, 'info');
+                logMessage(`  Content: ${data.message}`, 'info');
+                if (data.metadata) {
+                    logMessage(`  Metadata: ${JSON.stringify(data.metadata)}`, 'info');
+                }
+            });
+
             socket.on('user_status_update', (data) => {
                 logMessage(`📢 Friend Status: ${data.email || data.userId} is now ${data.status}`, 'info');
             });

@@ -1,6 +1,6 @@
 export default () => ({
-  port: process.env.PORT ? parseInt(process.env.PORT, 10) : 3001,
-  wsPort: process.env.WS_PORT ? parseInt(process.env.WS_PORT, 10) : 3001,
+  port: process.env.PORT ? parseInt(process.env.PORT, 10) : 3000,
+  internalPort: process.env.INTERNAL_PORT ? parseInt(process.env.INTERNAL_PORT, 10) : 4000,
   nodeEnv: process.env.NODE_ENV || 'development',
   jwt: {
     secret: process.env.JWT_SECRET || 'your-secret-key',
