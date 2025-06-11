@@ -2,6 +2,7 @@ import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Redis, Cluster, NodeRole } from 'ioredis';
 import { Logger } from '@nestjs/common';
+import { ServiceConfig } from '../config/configuration';
 
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
@@ -520,6 +521,110 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       } else {
         this.logger.error('Failed to cleanup idle sessions: Unknown error');
       }
+    }
+  }
+
+  // Service configuration methods
+  async setServiceConfig(serviceName: string, config: ServiceConfig): Promise<void> {
+    try {
+      const key = `service:config:${serviceName}`;
+      await this.redisClient.set(key, JSON.stringify(config));
+      this.logger.debug(`Service config set for ${serviceName}`);
+    } catch (error) {
+      this.logger.error(`Failed to set service config for ${serviceName}:`, error);
+      throw error;
+    }
+  }
+
+  async getServiceConfig(serviceName: string): Promise<ServiceConfig | null> {
+    try {
+      const key = `service:config:${serviceName}`;
+      const data = await this.redisClient.get(key);
+      return data ? JSON.parse(data) : null;
+    } catch (error) {
+      this.logger.error(`Failed to get service config for ${serviceName}:`, error);
+      return null;
+    }
+  }
+
+  // Service session methods
+  async setServiceSession(
+    serviceName: string,
+    socketId: string,
+    data: {
+      serviceName: string;
+      serviceType: string;
+      socketId: string;
+      connectedAt: Date;
+      description: string;
+      metadata?: Record<string, any>;
+    },
+    expirySeconds: number
+  ): Promise<void> {
+    try {
+      const key = `service:session:${serviceName}:${socketId}`;
+      await this.redisClient.set(key, JSON.stringify(data), 'EX', expirySeconds);
+      this.logger.debug(`Service session set for ${serviceName} (${socketId})`);
+    } catch (error) {
+      this.logger.error(`Failed to set service session for ${serviceName}:`, error);
+      throw error;
+    }
+  }
+
+  async getServiceSession(serviceName: string, socketId: string): Promise<any> {
+    try {
+      const key = `service:session:${serviceName}:${socketId}`;
+      const data = await this.redisClient.get(key);
+      return data ? JSON.parse(data) : null;
+    } catch (error) {
+      this.logger.error(`Failed to get service session for ${serviceName}:`, error);
+      return null;
+    }
+  }
+
+  async removeServiceSession(serviceName: string, socketId: string): Promise<void> {
+    try {
+      const key = `service:session:${serviceName}:${socketId}`;
+      await this.redisClient.del(key);
+      this.logger.debug(`Service session removed for ${serviceName} (${socketId})`);
+    } catch (error) {
+      this.logger.error(`Failed to remove service session for ${serviceName}:`, error);
+      throw error;
+    }
+  }
+
+  async updateServiceSessionActivity(
+    serviceName: string,
+    socketId: string,
+    expirySeconds: number
+  ): Promise<void> {
+    try {
+      const key = `service:session:${serviceName}:${socketId}`;
+      const data = await this.redisClient.get(key);
+      if (data) {
+        await this.redisClient.expire(key, expirySeconds);
+        this.logger.debug(`Service session activity updated for ${serviceName} (${socketId})`);
+      }
+    } catch (error) {
+      this.logger.error(`Failed to update service session activity for ${serviceName}:`, error);
+      throw error;
+    }
+  }
+
+  async getServiceSessions(serviceName: string): Promise<any[]> {
+    try {
+      const pattern = `service:session:${serviceName}:*`;
+      const keys = await this.redisClient.keys(pattern);
+      const sessions = await Promise.all(
+        keys.map(async (key) => {
+          const data = await this.redisClient.get(key);
+          return data ? JSON.parse(data) : null;
+        })
+      );
+      return sessions.filter(session => session !== null);
+    } catch (error) {
+      this.logger.error(`Failed to get service sessions for ${serviceName}:`, error);
+      return [];
     }
   }
 } 

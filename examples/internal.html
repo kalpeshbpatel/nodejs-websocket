@@ -273,7 +273,15 @@
                 </div>
                 <div class="form-group">
                     <label for="serviceName">Service Name:</label>
-                    <input type="text" id="serviceName" placeholder="Enter your microservice name">
+                    <select id="serviceName" class="form-control">
+                        <option value="">Select a service</option>
+                        <option value="demo">Demo Service (demo_service)</option>
+                    </select>
+                    <small style="display: block; margin-top: 5px; color: #666;">Service Type: demo_service</small>
+                </div>
+                <div class="form-group">
+                    <label for="serviceKey">Service Key:</label>
+                    <input type="password" id="serviceKey" placeholder="Enter your service key">
                 </div>
                 <div class="button-grid">
                     <button class="btn btn-primary" id="connectBtn">
@@ -358,6 +366,7 @@
         const elements = {
             serverUrl: document.getElementById('serverUrl'),
             serviceName: document.getElementById('serviceName'),
+            serviceKey: document.getElementById('serviceKey'),
             connectBtn: document.getElementById('connectBtn'),
             disconnectBtn: document.getElementById('disconnectBtn'),
             status: document.getElementById('status'),
@@ -373,6 +382,23 @@
             successRate: document.getElementById('successRate'),
             avgLatency: document.getElementById('avgLatency')
         };
+
+        // Service key mapping (in production, these should be securely stored)
+        const serviceKeys = {
+            'demo': 'demo-service-secure-key-123'  // This matches the service name in configuration.ts
+        };
+
+        // Update service key when service name changes
+        elements.serviceName.addEventListener('change', () => {
+            const selectedService = elements.serviceName.value;
+            elements.serviceKey.value = serviceKeys[selectedService] || '';
+            
+            // Log the selected service for debugging
+            if (selectedService) {
+                logMessage(`Selected service: ${selectedService}`, 'info');
+                logMessage(`Service key: ${serviceKeys[selectedService] || 'Not found'}`, 'info');
+            }
+        });
 
         function logMessage(message, type = 'info') {
             const timestamp = new Date().toLocaleTimeString();
@@ -391,7 +417,7 @@
             currentService = service;
             
             if (connected) {
-                elements.status.innerHTML = '<span class="emoji">✅</span> Connected';
+                elements.status.innerHTML = '<span class="emoji">✅</span> Connected & Authenticated';
                 elements.status.className = 'status connected';
                 elements.connectBtn.disabled = true;
                 elements.disconnectBtn.disabled = false;
@@ -402,6 +428,7 @@
                     elements.serviceInfo.style.display = 'block';
                     elements.serviceInfo.innerHTML = `
                         <strong>🔧 ${service.name}</strong><br>
+                        <span class="highlight">Type:</span> ${service.type}<br>
                         <span class="highlight">Socket ID:</span> ${service.socketId}<br>
                         <span class="highlight">Connected At:</span> ${new Date(service.connectedAt).toLocaleString()}
                     `;
@@ -430,11 +457,16 @@
         elements.connectBtn.addEventListener('click', () => {
             const url = elements.serverUrl.value.trim();
             const serviceName = elements.serviceName.value.trim();
+            const serviceKey = elements.serviceKey.value.trim();
 
-            if (!serviceName) {
-                alert('Please enter a service name');
+            if (!serviceName || !serviceKey) {
+                alert('Please select a service and enter the service key');
                 return;
             }
+
+            // Log authentication attempt details
+            logMessage(`Attempting to authenticate service: ${serviceName}`, 'info');
+            logMessage(`Using service key: ${serviceKey}`, 'info');
 
             logMessage(`Connecting to ${url}...`, 'info');
 
@@ -447,11 +479,29 @@
 
             socket.on('connect', () => {
                 logMessage(`Socket connected! ID: ${socket.id}`, 'success');
-                updateConnectionStatus(true, {
-                    name: serviceName,
-                    socketId: socket.id,
-                    connectedAt: new Date()
+                logMessage('Authenticating service...', 'info');
+                
+                // Send authentication request with exact service name
+                socket.emit('authenticate_service', {
+                    serviceName: serviceName,  // This should be 'demo'
+                    serviceKey: serviceKey     // This should be 'demo-service-secure-key-123'
                 });
+            });
+
+            socket.on('service_authenticated', (data) => {
+                logMessage(`Service authenticated successfully!`, 'success');
+                updateConnectionStatus(true, {
+                    name: data.serviceName,
+                    type: data.serviceType,
+                    socketId: data.socketId,
+                    connectedAt: new Date(data.connectedAt)
+                });
+            });
+
+            socket.on('authentication_error', (data) => {
+                logMessage(`Authentication failed: ${data.error}`, 'error');
+                updateConnectionStatus(false);
+                socket.disconnect();
             });
 
             socket.on('disconnect', (reason) => {
@@ -564,7 +614,11 @@
                 socket.emit('ping', (response) => {
                     const latency = Date.now() - startTime;
                     if (response && response.timestamp) {
-                        logMessage(`🏓 Pong received (${latency}ms) - Service: ${response.service}`, 'success');
+                        if (response.status === 'error') {
+                            logMessage(`❌ Ping error: ${response.error}`, 'error');
+                        } else {
+                            logMessage(`🏓 Pong received (${latency}ms) - Service: ${response.service.name} (${response.service.type})`, 'success');
+                        }
                     } else {
                         logMessage(`🏓 Pong: ${JSON.stringify(response)}`, 'success');
                     }

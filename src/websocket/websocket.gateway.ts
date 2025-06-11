@@ -366,21 +366,17 @@ export class AppWebSocketGateway implements OnGatewayInit, OnGatewayConnection, 
     }
   ) {
     try {
-      // Update sender's session activity
-      const user = client.data.user;
-      if (user) {
-        await this.redisService.updateSessionActivity(user.userId, client.id);
-      }
-
       // Check if this is an internal service message
       const isInternalService = data.metadata?.source === 'internal_service';
       
-      // For internal service messages, bypass authentication
+      // For internal service messages, bypass user authentication
       if (!isInternalService) {
         const user = client.data.user;
         if (!user) {
           throw new Error('User not authenticated');
         }
+        // Update sender's session activity only for user messages
+        await this.redisService.updateSessionActivity(user.userId, client.id);
       }
 
       if (!data.recipientIds || !Array.isArray(data.recipientIds) || data.recipientIds.length === 0 || !data.message) {
@@ -425,8 +421,10 @@ export class AppWebSocketGateway implements OnGatewayInit, OnGatewayConnection, 
         this.server.to(socketId).emit('message', {
           recipientId,
           message: data.message,
-          metadata: data.metadata,
-          timestamp: new Date().toISOString()
+          metadata: {
+            ...data.metadata,
+            timestamp: new Date().toISOString()
+          }
         });
       }
 
